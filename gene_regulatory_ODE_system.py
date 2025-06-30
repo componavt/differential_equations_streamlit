@@ -20,11 +20,23 @@ methods = sorted(set(d['method'] for d in data))
 st.title("ODE Solution Visualization")
 st.markdown("Select parameters to display one of the solutions.")
 
-# User selects parameters
-alpha = st.selectbox("Alpha", alpha_list, format_func=lambda a: f"{a:.0e}")
-gamma1 = st.selectbox("Gamma 1 (γ₁)", gamma1_list)
-gamma2 = st.selectbox("Gamma 2 (γ₂)", gamma2_list)
-method = st.selectbox("Integration Method", methods)
+# Integration method - horizontal radio buttons
+method = st.radio("Integration Method", methods, horizontal=True)
+
+# Sliders for Alpha, Gamma1, Gamma2 in three vertical sliders placed horizontally
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    alpha = st.slider("Alpha", min_value=min(alpha_list), max_value=max(alpha_list), 
+                     value=alpha_list[0], step=alpha_list[1] - alpha_list[0], format="%0.0e")
+
+with col2:
+    gamma1 = st.slider("Gamma 1 (\u03b31)", min_value=min(gamma1_list), max_value=max(gamma1_list), 
+                      value=gamma1_list[0], step=gamma1_list[1] - gamma1_list[0])
+
+with col3:
+    gamma2 = st.slider("Gamma 2 (\u03b32)", min_value=min(gamma2_list), max_value=max(gamma2_list), 
+                      value=gamma2_list[0], step=gamma2_list[1] - gamma2_list[0])
 
 # Filter the dataset based on selected parameters
 filtered = [
@@ -41,12 +53,12 @@ if filtered:
     t = d['t']
     x = d['x']
     y = d['y']
-    
+
     fig, ax = plt.subplots()
     ax.plot(x, y, label="x(t), y(t)")
     ax.set_xlabel("x(t)")
     ax.set_ylabel("y(t)")
-    ax.set_title(f"alpha={alpha:.0e}, γ₁={gamma1}, γ₂={gamma2}, method={method}")
+    ax.set_title(f"alpha={alpha:.0e}, γ1={gamma1}, γ2={gamma2}, method={method}")
     ax.grid(True)
     st.pyplot(fig)
 else:
