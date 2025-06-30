@@ -27,8 +27,7 @@ method = st.radio("Integration Method", methods, horizontal=True)
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    alpha = st.slider("Alpha", min_value=min(alpha_list), max_value=max(alpha_list), 
-                     value=alpha_list[0], step=alpha_list[1] - alpha_list[0], format="%0.0e")
+    alpha = st.selectbox("Alpha", alpha_list, format_func=lambda a: f"{a:.0e}")
 
 with col2:
     gamma1 = st.slider("Gamma 1 (\u03b31)", min_value=min(gamma1_list), max_value=max(gamma1_list), 
