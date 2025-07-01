@@ -2,25 +2,13 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import pickle
 
-# Load saved data from .npz file (structured arrays)
+# Load saved data from .pkl file
 @st.cache_data
-def load_data(path="data/004_solutions_gene_ODU_N100.npz"):
-    npzfile = np.load(path, allow_pickle=True)
-    data = []
-    for i in range(len(npzfile['alpha'])):
-        data.append({
-            'alpha': npzfile['alpha'][i],
-            'gamma1': npzfile['gamma1'][i],
-            'gamma2': npzfile['gamma2'][i],
-            'method': npzfile['method'][i],
-            'x0': npzfile['x0'][i],
-            'y0': npzfile['y0'][i],
-            't': npzfile['t'][i],
-            'x': npzfile['x'][i],
-            'y': npzfile['y'][i],
-        })
-    return data
+def load_data(path="data/005_solutions_gene_ODU_N100.pkl"):
+    with open(path, "rb") as f:
+        return pickle.load(f)
 
 data = load_data()
 
@@ -78,7 +66,10 @@ for idx, method in enumerate(methods):
         for d in filtered:
             x = d['x']
             y = d['y']
-            ax.plot(x, y, label=f"α={alpha:.0e}", linewidth=1.5)
+            x0 = d['x0']
+            y0 = d['y0']
+            label_text = f"x₀={x0:.3f}, y₀={y0:.3f}"
+            ax.plot(x, y, label=label_text, linewidth=1.5)
             skip = max(3, len(x) // 30)
             x_skip = x[::skip]
             y_skip = y[::skip]
