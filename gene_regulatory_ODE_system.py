@@ -30,8 +30,8 @@ gamma1_list = sorted(set(d['gamma1'] for d in data))
 gamma2_list = sorted(set(d['gamma2'] for d in data))
 methods = sorted(set(d['method'] for d in data))
 
-st.title("ODE Solution Visualization: 4 Integration Methods")
-st.markdown("Select parameters to display all solutions for each method.")
+st.title("ODE Solution Visualization")
+st.markdown("Select parameters to display all solutions.")
 
 # Sliders for Gamma1 and Gamma2 in two columns
 col1, col2 = st.columns(2)
