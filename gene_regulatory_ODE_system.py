@@ -5,7 +5,7 @@ import matplotlib.cm as cm
 
 # Load saved data from .npz file (structured arrays)
 @st.cache_data
-def load_data(path="data/solutions_gene_ODU.npz"):
+def load_data(path="data/003_solutions_gene_ODU_unique.npz"):
     npzfile = np.load(path, allow_pickle=True)
     data = []
     for i in range(len(npzfile['alpha'])):
