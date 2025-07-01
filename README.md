@@ -10,3 +10,12 @@ The app is designed for researchers to explore the behavior of gene regulatory d
 - **γ₁, γ₂ (gamma1, gamma2)**: degradation or feedback coefficients
 - **Initial conditions**: variations near equilibrium
 - **Solver methods**: RK45, Radau, DOP853, Symplectic, etc.
+
+# Gene Regulatory ODE System – Streamlit App  
+
+Explore numerical solutions to a system of ODEs modeling gene regulation using different solvers and parameter settings.  
+
+## 🔗 Live Demo for 
+**[https://neuraldiffur.streamlit.app/](https://neuraldiffur.streamlit.app/)**  
+
+[Source Code](https://github.com/componavt/differential_equations_streamlit)**  
