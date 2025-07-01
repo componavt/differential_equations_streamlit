@@ -3,11 +3,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
-# Load saved data from .npz
+# Load saved data from .npz file (structured arrays)
 @st.cache_data
-def load_data(path="data/003_solutions_gene_ODU_unique.npz"):
+def load_data(path="data/solutions_gene_ODU.npz"):
     npzfile = np.load(path, allow_pickle=True)
-    return list(npzfile['data'])
+    data = []
+    for i in range(len(npzfile['alpha'])):
+        data.append({
+            'alpha': npzfile['alpha'][i],
+            'gamma1': npzfile['gamma1'][i],
+            'gamma2': npzfile['gamma2'][i],
+            'method': npzfile['method'][i],
+            'x0': npzfile['x0'][i],
+            'y0': npzfile['y0'][i],
+            't': npzfile['t'][i],
+            'x': npzfile['x'][i],
+            'y': npzfile['y'][i],
+        })
+    return data
 
 data = load_data()
 
