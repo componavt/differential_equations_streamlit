@@ -15,7 +15,4 @@ The app is designed for researchers to explore the behavior of gene regulatory d
 
 Explore numerical solutions to a system of ODEs modeling gene regulation using different solvers and parameter settings.  
 
-## 🔗 Live Demo for 
-**[https://neuraldiffur.streamlit.app/](https://neuraldiffur.streamlit.app/)**  
-
-[Source Code](https://github.com/componavt/differential_equations_streamlit)**  
+🔗 Live Demo [neuraldiffur.streamlit.app](https://neuraldiffur.streamlit.app/) for source code [differential_equations_streamlit](https://github.com/componavt/differential_equations_streamlit).
