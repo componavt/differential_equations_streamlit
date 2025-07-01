@@ -19,6 +19,26 @@ gamma1_list = sorted(set(d['gamma1'] for d in data))
 gamma2_list = sorted(set(d['gamma2'] for d in data))
 methods = sorted(set(d['method'] for d in data))
 
+# Sliders and explanation after the plots
+st.markdown("---")
+st.latex(r"""
+\begin{cases}
+\frac{dx}{dt} = \frac{K\,x^{1/\alpha}}{b^{1/\alpha} + x^{1/\alpha}} \;-\; \gamma_1\,x,\\[6pt]
+\frac{dy}{dt} = \frac{K\,y^{1/\alpha}}{b^{1/\alpha} + y^{1/\alpha}} \;-\; \gamma_2\,y.
+\end{cases}
+""")
+
+st.markdown("Select parameters to animate solutions for each method across alpha values.")
+
+# Sliders for Gamma1 and Gamma2 in two columns
+col1, col2 = st.columns(2)
+with col1:
+    gamma1 = st.slider("Gamma 1 (γ1)", min_value=min(gamma1_list), max_value=max(gamma1_list), 
+                      value=gamma1_list[0], step=gamma1_list[1] - gamma1_list[0])
+with col2:
+    gamma2 = st.slider("Gamma 2 (γ2)", min_value=min(gamma2_list), max_value=max(gamma2_list), 
+                      value=gamma2_list[0], step=gamma2_list[1] - gamma2_list[0])
+
 # Initialize figures and axes for reuse
 figs_axes = []
 cols = st.columns(2)
@@ -78,17 +98,3 @@ if st.button("Start Animation"):
 
         st.markdown("**Note:** The start point of the trajectory is marked with a circle (●), and the end point with a cross (×).")
         time.sleep(1.0)
-
-# Sliders and explanation after the plots
-st.markdown("---")
-
-st.markdown("Select parameters to animate solutions for each method across alpha values.")
-
-# Sliders for Gamma1 and Gamma2 in two columns
-col1, col2 = st.columns(2)
-with col1:
-    gamma1 = st.slider("Gamma 1 (γ1)", min_value=min(gamma1_list), max_value=max(gamma1_list), 
-                      value=gamma1_list[0], step=gamma1_list[1] - gamma1_list[0])
-with col2:
-    gamma2 = st.slider("Gamma 2 (γ2)", min_value=min(gamma2_list), max_value=max(gamma2_list), 
-                      value=gamma2_list[0], step=gamma2_list[1] - gamma2_list[0])
