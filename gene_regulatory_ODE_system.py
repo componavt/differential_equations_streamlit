@@ -23,8 +23,8 @@ methods = sorted(set(d['method'] for d in data))
 st.markdown("---")
 st.latex(r"""
 \begin{cases}
-\frac{dx}{dt} = \frac{K\,x^{1/\alpha}}{b^{1/\alpha} + x^{1/\alpha}} \;-\; \gamma_1\,x,\\[6pt]
-\frac{dy}{dt} = \frac{K\,y^{1/\alpha}}{b^{1/\alpha} + y^{1/\alpha}} \;-\; \gamma_2\,y.
+\frac{dx}{dt} = \frac{K\,x^{1/\alpha}}{b^{1/\alpha} + x^{1/\alpha}} \;\-\; \gamma_1\,x,\\[6pt]
+\frac{dy}{dt} = \frac{K\,y^{1/\alpha}}{b^{1/\alpha} + y^{1/\alpha}} \;\-\; \gamma_2\,y.
 \end{cases}
 """)
 
@@ -82,6 +82,7 @@ if st.button("Start Animation"):
             for d in filtered:
                 x = d['x']
                 y = d['y']
+                # Plot trajectory with alpha legend
                 ax.plot(x, y, label=f"α={alpha:.0e}", linewidth=1.5)
                 skip = max(3, len(x) // 30)
                 x_skip = x[::skip]
@@ -90,11 +91,13 @@ if st.button("Start Animation"):
                     dx = np.gradient(x_skip)
                     dy = np.gradient(y_skip)
                     ax.quiver(x_skip, y_skip, dx, dy, angles='xy', scale_units='xy', scale=2.5, width=0.003, alpha=0.5)
-                ax.plot(x[0], y[0], marker='o', color='black', markersize=4, label=None)
-                ax.plot(x[-1], y[-1], marker='x', color='red', markersize=4, label=None)
+                ax.plot(x[0], y[0], marker='o', color='black', markersize=4)
+                ax.plot(x[-1], y[-1], marker='x', color='red', markersize=4)
 
             ax.legend(fontsize=7, loc='best')
             plot_placeholders[idx].pyplot(fig)
 
-        st.markdown("**Note:** The start point of the trajectory is marked with a circle (●), and the end point with a cross (×).")
         time.sleep(1.0)
+
+    # Display note once after all alpha frames
+    st.markdown("**Note:** The start point of the trajectory is marked with a circle (●), and the end point with a cross (×).")
