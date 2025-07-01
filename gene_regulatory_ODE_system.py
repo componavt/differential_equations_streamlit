@@ -1,15 +1,3 @@
-"""
-Gene Regulatory ODE System – Streamlit App
-
-Explore numerical solutions to a system of ODEs modeling gene regulation
-using different solvers and parameter settings.
-
-🔗 Live App: https://neuraldiffur.streamlit.app/
-📦 Source code: https://github.com/componavt/differential_equations_streamlit
-
-Author: Andrew Krizhanovsky
-"""
-
 import streamlit as st
 import pickle
 import numpy as np
