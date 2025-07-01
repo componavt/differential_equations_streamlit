@@ -17,48 +17,55 @@ gamma1_list = sorted(set(d['gamma1'] for d in data))
 gamma2_list = sorted(set(d['gamma2'] for d in data))
 methods = sorted(set(d['method'] for d in data))
 
-st.title("ODE Solution Visualization")
-st.markdown("Select parameters to display one of the solutions.")
+st.title("ODE Solution Visualization: 4 Integration Methods")
+st.markdown("Select parameters to display all solutions for each method.")
 
-# Integration method - horizontal radio buttons
-method = st.radio("Integration Method", methods, horizontal=True)
+# User selects shared parameters
+gamma1 = st.selectbox("Gamma 1 (γ₁)", gamma1_list)
+gamma2 = st.selectbox("Gamma 2 (γ₂)", gamma2_list)
 
-# Sliders for Alpha, Gamma1, Gamma2 in three vertical sliders placed horizontally
-col1, col2, col3 = st.columns(3)
+# Prepare layout for 4 integration methods in one row
+cols = st.columns(4)
 
-with col1:
-    alpha = st.selectbox("Alpha", alpha_list, format_func=lambda a: f"{a:.0e}")
+for idx, method in enumerate(methods):
+    with cols[idx]:
+        fig, ax = plt.subplots()
+        ax.set_title(method, fontsize=10)
 
-with col2:
-    gamma1 = st.slider("Gamma 1 (\u03b31)", min_value=min(gamma1_list), max_value=max(gamma1_list), 
-                      value=gamma1_list[0], step=gamma1_list[1] - gamma1_list[0])
+        # Filter solutions for selected gamma1, gamma2, and method, varying alpha
+        filtered = [
+            d for d in data
+            if np.isclose(d['gamma1'], gamma1)
+            and np.isclose(d['gamma2'], gamma2)
+            and d['method'] == method
+        ]
 
-with col3:
-    gamma2 = st.slider("Gamma 2 (\u03b32)", min_value=min(gamma2_list), max_value=max(gamma2_list), 
-                      value=gamma2_list[0], step=gamma2_list[1] - gamma2_list[0])
+        for d in filtered:
+            alpha = d['alpha']
+            x = d['x']
+            y = d['y']
 
-# Filter the dataset based on selected parameters
-filtered = [
-    d for d in data
-    if np.isclose(d['alpha'], alpha)
-    and np.isclose(d['gamma1'], gamma1)
-    and np.isclose(d['gamma2'], gamma2)
-    and d['method'] == method
-]
+            # Plot trajectory
+            ax.plot(x, y, label=f"α={alpha:.0e}", linewidth=1.2)
 
-# Plot the result
-if filtered:
-    d = filtered[0]
-    t = d['t']
-    x = d['x']
-    y = d['y']
+            # Arrows along trajectory (sparser sampling)
+            skip = max(3, len(x) // 30)
+            x_skip = x[::skip]
+            y_skip = y[::skip]
+            if len(x_skip) >= 2:
+                dx = np.gradient(x_skip)
+                dy = np.gradient(y_skip)
+                ax.quiver(x_skip, y_skip, dx, dy, angles='xy', scale_units='xy', scale=2.5, width=0.003, alpha=0.5)
 
-    fig, ax = plt.subplots()
-    ax.plot(x, y, label="x(t), y(t)")
-    ax.set_xlabel("x(t)")
-    ax.set_ylabel("y(t)")
-    ax.set_title(f"alpha={alpha:.0e}, γ1={gamma1}, γ2={gamma2}, method={method}")
-    ax.grid(True)
-    st.pyplot(fig)
-else:
-    st.warning("No solution found for the selected parameters.")
+            # Label mid-trajectory
+            mid = len(x) // 2
+            ax.text(x[mid], y[mid], f"α={alpha:.0e}", fontsize=7, alpha=0.6)
+
+        ax.set_xlabel("x(t)", fontsize=8)
+        ax.set_ylabel("y(t)", fontsize=8)
+        ax.grid(True, linestyle='--', linewidth=0.5)
+        ax.tick_params(labelsize=7)
+        ax.set_xlim(0.5, 2.0)
+        ax.set_ylim(0.5, 2.0)
+        ax.legend(fontsize=6, loc='best')
+        st.pyplot(fig)
