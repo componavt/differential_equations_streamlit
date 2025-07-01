@@ -6,7 +6,7 @@ import pickle
 
 # Load saved data from .pkl file
 @st.cache_data
-def load_data(path="data/005_solutions_gene_ODU_N100.pkl"):
+def load_data(path="data/005_solutions2550_gene_ODU_N100.pkl"):
     with open(path, "rb") as f:
         return pickle.load(f)
 
