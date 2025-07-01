@@ -5,7 +5,7 @@ import matplotlib.cm as cm
 
 # Load saved data from .npz
 @st.cache_data
-def load_data(path="data/002_solutions_gene_ODU_unique.npz"):
+def load_data(path="data/003_solutions_gene_ODU_unique.npz"):
     npzfile = np.load(path, allow_pickle=True)
     return list(npzfile['data'])
 
