@@ -33,11 +33,12 @@ st.markdown("Select parameters to display the solution for each method.")
 col1, col2, col3 = st.columns(3)
 with col1:
     alpha = st.selectbox("Alpha (α)", options=alpha_list, format_func=lambda a: f"{a:.0e}")
+
 with col2:
-    gamma1 = st.slider("Gamma 1 (γ1)", min_value=min(gamma1_list), max_value=max(gamma1_list), 
+    gamma1 = st.slider("γ₁ (Gamma 1)", min_value=min(gamma1_list), max_value=max(gamma1_list), 
                       value=gamma1_list[0], step=gamma1_list[1] - gamma1_list[0])
 with col3:
-    gamma2 = st.slider("Gamma 2 (γ2)", min_value=min(gamma2_list), max_value=max(gamma2_list), 
+    gamma2 = st.slider("γ₂ (Gamma 2)", min_value=min(gamma2_list), max_value=max(gamma2_list), 
                       value=gamma2_list[0], step=gamma2_list[1] - gamma2_list[0])
 
 # Display updated plots for selected alpha
