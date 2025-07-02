@@ -6,7 +6,7 @@ import pandas as pd
 
 # Load saved DataFrame from .pkl file
 @st.cache_data
-def load_data(path="data/008_solutions_gene_ODU_N500_points135K.pkl"):
+def load_data(path="data/009_solutions_gene_DOP853_points33K.pkl"):
     return pd.read_pickle(path)
 
 df = load_data()
