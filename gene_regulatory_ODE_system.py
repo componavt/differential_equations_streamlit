@@ -2,21 +2,19 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import pickle
+import pandas as pd
 
-# Load saved data from .pkl file
+# Load saved DataFrame from .pkl file
 @st.cache_data
-def load_data(path="data/005_solutions2550_gene_ODU_N100.pkl"):
-    with open(path, "rb") as f:
-        return pickle.load(f)
+def load_data(path="data/008_solutions_gene_ODU_N500_points135K.pkl"):
+    return pd.read_pickle(path)
 
-data = load_data()
+df = load_data()
 
 # Extract all unique parameter values
-alpha_list = sorted(set(d['alpha'] for d in data))
-gamma1_list = sorted(set(d['gamma1'] for d in data))
-gamma2_list = sorted(set(d['gamma2'] for d in data))
-methods = sorted(set(d['method'] for d in data))
+alpha_list = sorted(df['alpha'].unique())
+gamma1_list = sorted(df['gamma1'].unique())
+gamma2_list = sorted(df['gamma2'].unique())
 
 # Sliders and explanation after the plots
 st.markdown("---")
@@ -33,7 +31,6 @@ st.markdown("Select parameters to display the solution for each method.")
 col1, col2, col3 = st.columns(3)
 with col1:
     alpha = st.selectbox("Alpha (α)", options=alpha_list, format_func=lambda a: f"{a:.0e}")
-
 with col2:
     gamma1 = st.slider("γ₁ (Gamma 1)", min_value=min(gamma1_list), max_value=max(gamma1_list), 
                       value=gamma1_list[0], step=gamma1_list[1] - gamma1_list[0])
@@ -42,7 +39,10 @@ with col3:
                       value=gamma2_list[0], step=gamma2_list[1] - gamma2_list[0])
 
 # Display updated plots for selected alpha
-figs_axes = []
+filtered_df = df[(df['alpha'] == alpha) & (df['gamma1'] == gamma1) & (df['gamma2'] == gamma2)]
+
+methods = sorted({m for sol in filtered_df['solutions'] for m in sol.keys()})
+
 cols = st.columns(2)
 for idx, method in enumerate(methods):
     col = cols[idx % 2]
@@ -56,30 +56,25 @@ for idx, method in enumerate(methods):
         ax.set_xlim(0.5, 2.0)
         ax.set_ylim(0.5, 2.0)
 
-        filtered = [
-            d for d in data
-            if np.isclose(d['gamma1'], gamma1)
-            and np.isclose(d['gamma2'], gamma2)
-            and np.isclose(d['alpha'], alpha)
-            and d['method'] == method
-        ]
+        for _, row in filtered_df.iterrows():
+            x0 = row['x0']
+            y0 = row['y0']
+            t = row['t']
+            solution = row['solutions']
 
-        for d in filtered:
-            x = d['x']
-            y = d['y']
-            x0 = d['x0']
-            y0 = d['y0']
-            label_text = f"x₀={x0:.3f}, y₀={y0:.3f}"
-            ax.plot(x, y, label=label_text, linewidth=1.5)
-            skip = max(3, len(x) // 30)
-            x_skip = x[::skip]
-            y_skip = y[::skip]
-            if len(x_skip) >= 2:
-                dx = np.gradient(x_skip)
-                dy = np.gradient(y_skip)
-                ax.quiver(x_skip, y_skip, dx, dy, angles='xy', scale_units='xy', scale=2.5, width=0.003, alpha=0.5)
-            ax.plot(x[0], y[0], marker='o', color='black', markersize=4)
-            ax.plot(x[-1], y[-1], marker='x', color='red', markersize=4)
+            if method in solution:
+                x, y = solution[method]
+                label_text = f"x₀={x0:.3f}, y₀={y0:.3f}"
+                ax.plot(x, y, label=label_text, linewidth=1.5)
+                skip = max(3, len(x) // 30)
+                x_skip = x[::skip]
+                y_skip = y[::skip]
+                if len(x_skip) >= 2:
+                    dx = np.gradient(x_skip)
+                    dy = np.gradient(y_skip)
+                    ax.quiver(x_skip, y_skip, dx, dy, angles='xy', scale_units='xy', scale=2.5, width=0.003, alpha=0.5)
+                ax.plot(x[0], y[0], marker='o', color='black', markersize=4)
+                ax.plot(x[-1], y[-1], marker='x', color='red', markersize=4)
 
         ax.legend(fontsize=7, loc='best')
         st.pyplot(fig)
