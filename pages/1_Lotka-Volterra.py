@@ -28,7 +28,7 @@ y0 = 1.0
 
 # Set up plot
 fig, ax = plt.subplots(figsize=(8, 6))
-title = f"({a}, {b}, {k}, {m}); t_end={t_end}"
+title = f"(a={a}, b={b}, k={k}, m={m}; t_end={t_end})"
 ax.set_title(f"Lotka–Volterra {title}", fontsize=14)
 ax.set_xlabel("Prey population x(t)", fontsize=12)
 ax.set_ylabel("Predator population y(t)", fontsize=12)
@@ -53,14 +53,15 @@ for x0 in x0_values:
 
 # Animation function
 def update(frame):
-    # Update each marker position; needs sequences for x and y
+    # Update each marker position
     for (x, y), marker in zip(trajectories, markers):
         x_val = x[frame]
         y_val = y[frame]
         marker.set_data([x_val], [y_val])
     return markers
 
-ani = animation.FuncAnimation(fig, update, frames=N, blit=True, interval=50)(fig, update, frames=N, blit=True, interval=50)
+# Create animation
+ani = animation.FuncAnimation(fig, update, frames=N, blit=True, interval=50)
 
 # Display animation as HTML
 html = ani.to_jshtml()
@@ -76,10 +77,10 @@ st.latex(r"""
 \end{cases}
 """)
 st.markdown(f"""
-**Notes:**
-- Start point ●, end point continuously moves over time.
-- Initial x₀ from 1.0 to 2.0 step 0.1; y₀ = 1.0.
-- Solver: {method}, points N = {N}.
+**Notes:**  
+- Start point ●, end point continuously moves over time.  
+- Initial x₀ from 1.0 to 2.0 step 0.1; y₀ = 1.0.  
+- Solver: {method}, points N = {N}.  
 """)
 
 # App title at bottom
