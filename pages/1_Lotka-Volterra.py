@@ -24,8 +24,7 @@ method = "DOP853"
 x0_values = np.arange(1.0, 2.01, 0.1)
 y0 = 1.0
 
-# Compute trajectories
-@st.cache_data
+# Compute trajectories without caching (to reflect t_end changes)
 def compute_trajectories(params):
     a_, b_, k_, m_ = params
     trajs = []
@@ -37,7 +36,7 @@ def compute_trajectories(params):
         trajs.append(sol.y)
     return trajs
 
-trajectories = compute_trajectories((a, b, k, m))
+trajectories = compute_trajectories((a, b, k, m))((a, b, k, m))
 
 # Plot static phase trajectories
 fig, ax = plt.subplots(figsize=(8, 6))
