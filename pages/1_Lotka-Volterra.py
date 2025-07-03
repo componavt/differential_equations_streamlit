@@ -16,7 +16,7 @@ m = st.sidebar.slider("Predator death rate m", min_value=0.0, max_value=2.0, ste
 t_end = st.sidebar.slider("End time (t_end)", min_value=1, max_value=50, step=1, value=35)
 
 # Number of evaluation points and time array
-N = 500
+N = 100
 t_eval = np.linspace(0, t_end, N)
 
 # Solver choice
