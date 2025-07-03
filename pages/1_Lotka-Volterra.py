@@ -2,6 +2,7 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
+import io
 
 # Sidebar controls
 st.sidebar.header("Simulation Settings")
@@ -15,7 +16,7 @@ t_end = st.sidebar.slider("End time (t_end)", min_value=1, max_value=50, step=1,
 
 # Animation slider: time t
 time_slider = st.sidebar.slider("Current time t", min_value=0.0, max_value=float(t_end), step=float(t_end)/499, value=0.0)
-frame = int(time_slider / t_end * (499))
+frame = int(time_slider / t_end * 499)
 
 # Number of evaluation points and time array
 N = 500
@@ -30,17 +31,19 @@ y0 = 1.0
 
 # Precompute trajectories once (cacheable)
 @st.cache_data
-def compute_trajectories():
+def compute_trajectories(params):
+    a_, b_, k_, m_ = params
     trajs = []
     for x0 in x0_values:
         def lv_system(t, z):
             x, y = z
-            return [x * (a - b * y), y * (k * b * x - m)]
+            return [x * (a_ - b_ * y), y * (k_ * b_ * x - m_)]
         sol = solve_ivp(lv_system, (0, t_end), [x0, y0], method=method, t_eval=t_eval)
         trajs.append(sol.y)
     return trajs
 
-trajectories = compute_trajectories()
+# Pass parameters tuple to caching to avoid stale cache
+trajectories = compute_trajectories((a, b, k, m))
 
 # Plot static trajectories and dynamic marker
 fig, ax = plt.subplots(figsize=(8, 6))
@@ -52,12 +55,15 @@ ax.grid(True, linestyle='--', linewidth=0.5)
 
 for idx, (x, y) in enumerate(trajectories):
     ax.plot(x, y, linewidth=1.0)
-    # dynamic marker
     ax.plot(x[frame], y[frame], 'o', markersize=6, color='red')
-    # label initial condition at end
     ax.text(x[-1], y[-1], f"x0={x0_values[idx]:.1f}", fontsize=8)
 
-st.pyplot(fig)
+# Render figure to image buffer to avoid media file errors
+buf = io.BytesIO()
+fig.savefig(buf, format="png", bbox_inches='tight')
+buf.seek(0)
+st.image(buf)
+plt.close(fig)
 
 # Mathematical formulation and notes on main page
 st.markdown("---")
@@ -68,6 +74,7 @@ st.latex(r"""
 \frac{dy}{dt} = y \left(k b x - m\right),
 \end{cases}
 """)
+
 # Notes
 st.markdown("---")
 st.markdown("""
