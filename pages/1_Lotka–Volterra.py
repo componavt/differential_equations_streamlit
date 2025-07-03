@@ -14,9 +14,8 @@ m = 0.1  # Predator death rate
 
 # Sidebar controls
 st.sidebar.header("Simulation Settings")
-# Create custom t_end options: 0–1 by 0.1, and 1.5–5 by 0.5
-t_end_values = list(np.round(np.arange(0, 1.01, 0.1), 2)) + list(np.round(np.arange(1.5, 5.1, 0.5), 2))
-t_end = st.sidebar.select_slider("End time (t_end)", options=t_end_values, value=1.0)
+# End time slider from 1 to 50 with step 1
+t_end = st.sidebar.slider("End time (t_end)", min_value=1, max_value=50, step=1, value=10)
 
 # Number of evaluation points and time array
 N = 500
@@ -66,7 +65,18 @@ for x0 in x0_values:
 # Display plot in Streamlit
 st.pyplot(fig)
 
-# Notes
+# Display the mathematical system and parameter values
+st.markdown("---")
+st.markdown("**Lotka–Volterra system of equations:**")
+st.latex(r"""
+\begin{cases}
+\frac{dx}{dt} = x \left(a - b y\right),\\
+\frac{dy}{dt} = y \left(k b x - m\right),
+\end{cases}
+""")
+st.write(f"Parameters: a = {a}, b = {b}, k = {k}, m = {m}")
+
+# Notes in sidebar
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Notes:**")
 st.sidebar.markdown("- The start point of each trajectory is ● and the end point is ×.")
