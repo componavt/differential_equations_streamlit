@@ -28,8 +28,8 @@ y0 = 1.0
 
 # Set up plot
 fig, ax = plt.subplots(figsize=(8, 6))
-title = f"Lotka–Volterra (a={a}, b={b}, k={k}, m={m}; t_end={t_end})"
-ax.set_title(title, fontsize=14)
+title = f"({a}, {b}, {k}, {m}); t_end={t_end}"
+ax.set_title(f"Lotka–Volterra {title}", fontsize=14)
 ax.set_xlabel("Prey population x(t)", fontsize=12)
 ax.set_ylabel("Predator population y(t)", fontsize=12)
 ax.grid(True, linestyle='--', linewidth=0.5)
@@ -72,11 +72,13 @@ st.latex(r"""
 \frac{dy}{dt} = y \left(k b x - m\right),
 \end{cases}
 """)
-st.markdown(f"**Notes:**  
-- Start point ●, end point continuously moves over time.  
-- Initial x₀ from 1.0 to 2.0 step 0.1; y₀ = 1.0.  
-- Solver: {method}, points N = {N}.")
+st.markdown(f"""
+**Notes:**
+- Start point ●, end point continuously moves over time.
+- Initial x₀ from 1.0 to 2.0 step 0.1; y₀ = 1.0.
+- Solver: {method}, points N = {N}.
+""")
 
 # App title at bottom
 st.markdown("---")
-st.markdown("*Lotka–Volterra Model Explorer*", unsafe_allow_html=True)
+st.markdown("*Lotka–Volterra Model Explorer*")
