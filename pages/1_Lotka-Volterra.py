@@ -14,7 +14,6 @@ m = st.sidebar.slider("Predator death rate m", min_value=0.0, max_value=2.0, ste
 t_end = st.sidebar.slider("End time (t_end)", min_value=1, max_value=50, step=1, value=35)
 
 # Animation slider: time t
-st.sidebar.markdown("---")
 time_slider = st.sidebar.slider("Current time t", min_value=0.0, max_value=float(t_end), step=float(t_end)/499, value=0.0)
 frame = int(time_slider / t_end * (499))
 
@@ -69,12 +68,14 @@ st.latex(r"""
 \frac{dy}{dt} = y \left(k b x - m\right),
 \end{cases}
 """)
-st.markdown(
-    "**Notes:**  
-    - The red marker shows the state at the selected time t.  
-    - Initial x₀ from 1.0 to 2.0 step 0.1; y₀ = 1.0.  
-    - Solver: DOP853, points N = 500."
-)
+# Notes
+st.markdown("---")
+st.markdown("""
+**Notes:**  
+- The red marker shows the state at the selected time t.  
+- Initial x₀ from 1.0 to 2.0 step 0.1; y₀ = 1.0.  
+- Solver: DOP853, points N = 500.
+""")
 
 # App title at bottom
 st.markdown("---")
