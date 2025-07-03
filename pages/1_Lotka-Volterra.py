@@ -36,7 +36,7 @@ def compute_trajectories(params):
         trajs.append(sol.y)
     return trajs
 
-trajectories = compute_trajectories((a, b, k, m))((a, b, k, m))
+trajectories = compute_trajectories((a, b, k, m))
 
 # Plot static phase trajectories
 fig, ax = plt.subplots(figsize=(8, 6))
