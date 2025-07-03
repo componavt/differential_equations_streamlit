@@ -53,11 +53,14 @@ for x0 in x0_values:
 
 # Animation function
 def update(frame):
+    # Update each marker position; needs sequences for x and y
     for (x, y), marker in zip(trajectories, markers):
-        marker.set_data(x[frame], y[frame])
+        x_val = x[frame]
+        y_val = y[frame]
+        marker.set_data([x_val], [y_val])
     return markers
 
-ani = animation.FuncAnimation(fig, update, frames=N, blit=True, interval=50)
+ani = animation.FuncAnimation(fig, update, frames=N, blit=True, interval=50)(fig, update, frames=N, blit=True, interval=50)
 
 # Display animation as HTML
 html = ani.to_jshtml()
