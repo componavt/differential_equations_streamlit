@@ -1,76 +1,74 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
+from scipy.integrate import solve_ivp
 
-# Load saved DataFrame from .pkl file
-@st.cache_data
-def load_data(path="data/013_DOP853_25radius_points171K_round3_float32.pkl"):
-    return pd.read_pickle(path)
+# Streamlit app for Lotka–Volterra equations
+st.title("Lotka–Volterra Model Explorer")
 
-df = load_data()
+# Fixed Lotka–Volterra parameters
+a = 0.2  # Prey growth rate
+b = 0.2  # Predation rate
+k = 0.5  # Predator efficiency factor
+m = 0.1  # Predator death rate
 
-# Extract all unique parameter values
-alpha_list = sorted(df['alpha'].unique())
-gamma1_list = sorted(df['gamma1'].unique())
-gamma2_list = sorted(df['gamma2'].unique())
+# Sidebar controls
+st.sidebar.header("Simulation Settings")
+# Create custom t_end options: 0–1 by 0.1, and 1.5–5 by 0.5
+t_end_values = list(np.round(np.arange(0, 1.01, 0.1), 2)) + list(np.round(np.arange(1.5, 5.1, 0.5), 2))
+t_end = st.sidebar.select_slider("End time (t_end)", options=t_end_values, value=1.0)
 
-# Sliders and explanation after the plot
-st.markdown("---")
-st.latex(r"""
-\begin{cases}
-\frac{dx}{dt} = \frac{K\,x^{1/\alpha}}{b^{1/\alpha} + x^{1/\alpha}} \;-\; \gamma_1\,x,\\[6pt]
-\frac{dy}{dt} = \frac{K\,y^{1/\alpha}}{b^{1/\alpha} + y^{1/\alpha}} \;-\; \gamma_2\,y.
-\end{cases}
-""")
+# Number of evaluation points and time array
+N = 500
+t_eval = np.linspace(0, t_end, N)
 
-st.markdown("Select parameters to display the solution using solver DOP853.")
+# Solver choice
+method = "DOP853"
 
-# Selection widgets
-col1, col2, col3 = st.columns(3)
-with col1:
-    alpha = st.selectbox("Alpha (α)", options=alpha_list, format_func=lambda a: f"{a:.0e}")
-with col2:
-    gamma1 = st.slider("γ₁ (Gamma 1)", min_value=min(gamma1_list), max_value=max(gamma1_list), 
-                      value=gamma1_list[0], step=gamma1_list[1] - gamma1_list[0])
-with col3:
-    gamma2 = st.slider("γ₂ (Gamma 2)", min_value=min(gamma2_list), max_value=max(gamma2_list), 
-                      value=gamma2_list[0], step=gamma2_list[1] - gamma2_list[0])
+# Initial conditions for prey (x0) and fixed predator initial y0
+x0_values = np.arange(1.0, 2.01, 0.1)
+y0 = 1.0
 
-# Filter data for selected parameters
-filtered_df = df[(df['alpha'] == alpha) & (df['gamma1'] == gamma1) & (df['gamma2'] == gamma2)]
-
-# Display the plot
-fig, ax = plt.subplots(figsize=(7, 5))
-ax.set_title(f"DOP853, α={alpha:.0e}, γ₁={gamma1}, γ₂={gamma2}", fontsize=11)
-ax.set_xlabel("x(t)", fontsize=9)
-ax.set_ylabel("y(t)", fontsize=9)
+# Set up plot
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.set_title(f"Lotka–Volterra Phase Portrait (t_end = {t_end})", fontsize=14)
+ax.set_xlabel("Prey population x(t)", fontsize=12)
+ax.set_ylabel("Predator population y(t)", fontsize=12)
 ax.grid(True, linestyle='--', linewidth=0.5)
-ax.tick_params(labelsize=8)
-ax.set_xlim(0.5, 2.0)
-ax.set_ylim(0.5, 2.0)
 
-for _, row in filtered_df.iterrows():
-    x0 = row['x0']
-    y0 = row['y0']
-    t = row['t']
-    x = row['x']
-    y = row['y']
-    label_text = f"x₀={x0:.3f}, y₀={y0:.3f}"
-    ax.plot(x, y, label=label_text, linewidth=1.5)
-    skip = max(3, len(x) // 30)
-    x_skip = x[::skip]
-    y_skip = y[::skip]
-    if len(x_skip) >= 2:
-        dx = np.gradient(x_skip)
-        dy = np.gradient(y_skip)
-        ax.quiver(x_skip, y_skip, dx, dy, angles='xy', scale_units='xy', scale=2.5, width=0.003, alpha=0.5)
+# Solve and plot trajectories for each initial x0
+for x0 in x0_values:
+    # Define the Lotka–Volterra system
+    def lv_system(t, z):
+        x, y = z
+        dxdt = x * (a - b * y)
+        dydt = y * (k * b * x - m)
+        return [dxdt, dydt]
+
+    # Solve ODE
+    sol = solve_ivp(
+        fun=lv_system,
+        t_span=(0, t_end),
+        y0=[x0, y0],
+        method=method,
+        t_eval=t_eval
+    )
+    x, y = sol.y
+
+    # Plot trajectory curve
+    ax.plot(x, y, linewidth=1.5)
+    # Mark start and end points
     ax.plot(x[0], y[0], marker='o', color='black', markersize=4)
     ax.plot(x[-1], y[-1], marker='x', color='red', markersize=4)
+    # Label curve at end point
+    ax.text(x[-1], y[-1], f"x0={x0:.1f}", fontsize=8)
 
-ax.legend(fontsize=7, loc='best')
+# Display plot in Streamlit
 st.pyplot(fig)
 
-# Display note
-st.markdown("**Note:** The start point of the trajectory is marked with a circle (●), and the end point with a cross (×).")
-st.markdown("Initial points (x₀, y₀) are placed on a circle with radius 0.01. There are 25 such initial points in total.")
+# Notes
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Notes:**")
+st.sidebar.markdown("- The start point of each trajectory is ● and the end point is ×.")
+st.sidebar.markdown("- Initial prey x₀ varies from 1.0 to 2.0 with step 0.1; predator y₀ = 1.0.")
+st.sidebar.markdown("- Solver: DOP853, points N = 500.")
