@@ -101,5 +101,5 @@ st.latex(r"""
 st.markdown("- Numeric safeguard: replaced x,y<ε with ε before power operations to avoid NaNs.")
 
 # Footer title
-nst.markdown("---")
+st.markdown("---")
 st.markdown("*safe_calculation: stabilized gene ODE explorer*")
