@@ -1,76 +1,86 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
+from scipy.integrate import solve_ivp
 
-# Load saved DataFrame from .pkl file
-@st.cache_data
-def load_data(path="data/013_DOP853_25radius_points171K_round3_float32.pkl"):
-    return pd.read_pickle(path)
+# --- Sidebar controls ---
+st.sidebar.header("Simulation Settings")
 
-df = load_data()
+# ODE solver parameters
+method = "DOP853"
+N = 500  # number of points
 
-# Extract all unique parameter values
-alpha_list = sorted(df['alpha'].unique())
-gamma1_list = sorted(df['gamma1'].unique())
-gamma2_list = sorted(df['gamma2'].unique())
+# Time range slider: 0–1 step 0.1, then 1–5 step 0.5
+t_end_values = list(np.round(np.arange(0, 1.01, 0.1), 2)) + list(np.round(np.arange(1.5, 5.1, 0.5), 2))
+t_end = st.sidebar.select_slider("End time (t_end)", options=t_end_values, value=1.0)
+t_eval = np.linspace(0, t_end, N)
 
-# Sliders and explanation after the plot
-st.markdown("---")
-st.latex(r"""
-\begin{cases}
-\frac{dx}{dt} = \frac{K\,x^{1/\alpha}}{b^{1/\alpha} + x^{1/\alpha}} \;-\; \gamma_1\,x,\\[6pt]
-\frac{dy}{dt} = \frac{K\,y^{1/\alpha}}{b^{1/\alpha} + y^{1/\alpha}} \;-\; \gamma_2\,y.
-\end{cases}
-""")
+# Gene-regulatory parameters as sliders
+gamma1 = st.sidebar.slider("Gamma 1", min_value=0.0, max_value=5.0, step=0.1, value=1.0)
+gamma2 = st.sidebar.slider("Gamma 2", min_value=0.0, max_value=5.0, step=0.1, value=1.0)
 
-st.markdown("Select parameters to display the solution using solver DOP853.")
+# Initial circle parameters
+num_points = st.sidebar.slider("Number of trajectories", min_value=3, max_value=50, step=1, value=12)
+initial_radius = st.sidebar.select_slider(
+    "Initial radius",
+    options=[0.001] + list(np.round(np.arange(0.01, 0.11, 0.01), 2)) + [0.2, 0.3]
+)
 
-# Selection widgets
-col1, col2, col3 = st.columns(3)
-with col1:
-    alpha = st.selectbox("Alpha (α)", options=alpha_list, format_func=lambda a: f"{a:.0e}")
-with col2:
-    gamma1 = st.slider("γ₁ (Gamma 1)", min_value=min(gamma1_list), max_value=max(gamma1_list), 
-                      value=gamma1_list[0], step=gamma1_list[1] - gamma1_list[0])
-with col3:
-    gamma2 = st.slider("γ₂ (Gamma 2)", min_value=min(gamma2_list), max_value=max(gamma2_list), 
-                      value=gamma2_list[0], step=gamma2_list[1] - gamma2_list[0])
+# --- Define RHS from existing notebook ---
+# TODO: paste the get_rhs function body from 99_DOP853_round3_float32.ipynb here
+# For example:
+def get_rhs(t, state):
+    x, y = state
+    # Example placeholder dynamics; replace with actual model
+    dxdt = -gamma1 * x + y**2 / (1 + y**2)
+    dydt = -gamma2 * y + x**2 / (1 + x**2)
+    return [dxdt, dydt]
 
-# Filter data for selected parameters
-filtered_df = df[(df['alpha'] == alpha) & (df['gamma1'] == gamma1) & (df['gamma2'] == gamma2)]
+# --- Compute initial points on circle ---
+angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
+initial_conditions = [(initial_radius * np.cos(a), initial_radius * np.sin(a)) for a in angles]
 
-# Display the plot
-fig, ax = plt.subplots(figsize=(7, 5))
-ax.set_title(f"DOP853, α={alpha:.0e}, γ₁={gamma1}, γ₂={gamma2}", fontsize=11)
-ax.set_xlabel("x(t)", fontsize=9)
-ax.set_ylabel("y(t)", fontsize=9)
-ax.grid(True, linestyle='--', linewidth=0.5)
-ax.tick_params(labelsize=8)
-ax.set_xlim(0.5, 2.0)
-ax.set_ylim(0.5, 2.0)
+# --- Plotting ---
+fig, ax = plt.subplots(figsize=(8, 6))
+# Build title with parameters
+title = f"Gene ODE: DOP853, t_end={t_end}, \u03B3₁={gamma1}, \u03B3₂={gamma2}, R={initial_radius}, n={num_points}"
+ax.set_title(title)
+ax.set_xlabel("x(t)")
+ax.set_ylabel("y(t)")
+ax.grid(True)
 
-for _, row in filtered_df.iterrows():
-    x0 = row['x0']
-    y0 = row['y0']
-    t = row['t']
-    x = row['x']
-    y = row['y']
-    label_text = f"x₀={x0:.3f}, y₀={y0:.3f}"
-    ax.plot(x, y, label=label_text, linewidth=1.5)
-    skip = max(3, len(x) // 30)
-    x_skip = x[::skip]
-    y_skip = y[::skip]
-    if len(x_skip) >= 2:
-        dx = np.gradient(x_skip)
-        dy = np.gradient(y_skip)
-        ax.quiver(x_skip, y_skip, dx, dy, angles='xy', scale_units='xy', scale=2.5, width=0.003, alpha=0.5)
-    ax.plot(x[0], y[0], marker='o', color='black', markersize=4)
-    ax.plot(x[-1], y[-1], marker='x', color='red', markersize=4)
+# Define line styles and colors
+styles = ['-', '--', '-.', ':']
+colors = plt.cm.tab20.colors
 
-ax.legend(fontsize=7, loc='best')
+for idx, (x0, y0) in enumerate(initial_conditions):
+    sol = solve_ivp(
+        fun=get_rhs,
+        t_span=(0, t_end),
+        y0=[x0, y0],
+        method=method,
+        t_eval=t_eval
+    )
+    x, y = sol.y
+
+    style = styles[idx % len(styles)]
+    color = colors[idx % len(colors)]
+    ax.plot(x, y, linestyle=style, color=color, linewidth=1.5)
+    # Label at end point
+    ax.text(x[-1], y[-1], f"({x0:.3f},{y0:.3f})", fontsize=8)
+
 st.pyplot(fig)
 
-# Display note
-st.markdown("**Note:** The start point of the trajectory is marked with a circle (●), and the end point with a cross (×).")
-st.markdown("Initial points (x₀, y₀) are placed on a circle with radius 0.01. There are 25 such initial points in total.")
+# --- Explanations below ---
+st.markdown("---")
+st.markdown("**System of ODEs:**")
+st.latex(r"""
+\frac{d\mathbf{x}}{dt} = f(t, \mathbf{x}); \quad f = \texttt{get_rhs}
+""")
+st.markdown("- Solver: DOP853, N = 500 points.  
+- Initial conditions on circle of radius R.  
+- Parameters gamma1, gamma2 selectable.")
+
+# Footer title
+st.markdown("---")
+st.markdown("*DOP853gene: merged gene regulatory ODE solver and plot*")
