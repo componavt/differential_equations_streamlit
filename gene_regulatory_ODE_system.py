@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 
+method = "DOP853"
+
 # --- Sidebar controls ---
 st.sidebar.header("Simulation Settings")
 
