@@ -37,16 +37,30 @@ rcol, ncol = st.sidebar.columns(2)
 initial_radius = rcol.select_slider("Initial radius", options=[0.001] + list(np.round(np.arange(0.01, 0.11, 0.01), 3)) + [0.2, 0.3])
 num_points = ncol.slider("Number of trajectories", min_value=3, max_value=50, step=1, value=12)
 
-# --- Safe RHS definition with small epsilon to avoid invalid power ---
-eps = 1e-8
-
+# --- Robust RHS with overflow handling ---
 def get_rhs_safe(t, state):
     x, y = state
-    # ensure positivity for fractional power
-    x_pos = np.maximum(x, eps)
-    y_pos = np.maximum(y, eps)
-    dxdt = (K * x_pos**(1 / alpha)) / (b**(1 / alpha) + x_pos**(1 / alpha)) - gamma1 * x
-    dydt = (K * y_pos**(1 / alpha)) / (b**(1 / alpha) + y_pos**(1 / alpha)) - gamma2 * y
+    n = 1 / alpha
+    # approximate step-function behavior for very large exponents
+    if n > 1000:
+        frac_x = K if x > b else 0.0
+        frac_y = K if y > b else 0.0
+    else:
+        x_pos = max(x, 0.0)
+        y_pos = max(y, 0.0)
+        try:
+            pow_x = x_pos**n
+            pow_b = b**n
+            frac_x = (K * pow_x) / (pow_b + pow_x)
+        except (OverflowError, FloatingPointError):
+            frac_x = K if x > b else 0.0
+        try:
+            pow_y = y_pos**n
+            frac_y = (K * pow_y) / (pow_b + pow_y)
+        except (OverflowError, FloatingPointError):
+            frac_y = K if y > b else 0.0
+    dxdt = frac_x - gamma1 * x
+    dydt = frac_y - gamma2 * y
     return [dxdt, dydt]
 
 # --- Compute initial points on circle centered at (b,b) ---
@@ -98,7 +112,7 @@ st.latex(r"""
 \frac{dy}{dt} = \frac{K\,y^{1/\alpha}}{b^{1/\alpha} + y^{1/\alpha}} - \gamma_2\,y.
 \end{cases}
 """)
-st.markdown("- Numeric safeguard: replaced x,y<ε with ε before power operations to avoid NaNs.")
+st.markdown("- Robust step-function approx when exponent is huge to avoid overflow." )
 
 # Footer title
 st.markdown("---")
