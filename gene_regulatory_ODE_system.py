@@ -103,6 +103,9 @@ st.markdown(f"""
 - Start point ●, end point ×. Arrows indicate direction of motion.
 """)
 
+st.markdown("**Parameters used in this run:**")
+st.text(f"DOP853, t_end={t_end}, K={K}, α={alpha}, b={b}, γ1={gamma1}, γ2={gamma2}, R={initial_radius}, n={num_points}, pts={t_number}")
+
 # Footer title
 st.markdown("---")
 st.markdown("*DOP853gene: merged gene regulatory ODE solver and plot*")
