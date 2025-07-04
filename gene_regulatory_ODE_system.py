@@ -42,7 +42,7 @@ initial_conditions = [(initial_radius * np.cos(a), initial_radius * np.sin(a)) f
 
 # --- Plotting ---
 fig, ax = plt.subplots(figsize=(8, 6))
-title = f"DOP853, t_end={t_end}, K={K}, α={alpha}, γ₁={gamma1}, γ₂={gamma2}, R={initial_radius}, n={num_points}"
+title = f"DOP853, t_end={t_end}, K={K}, α={alpha}, γ1={gamma1}, γ2={gamma2}, R={initial_radius}, n={num_points}"
 ax.set_title(title)
 ax.set_xlabel("x(t)")
 ax.set_ylabel("y(t)")
@@ -63,6 +63,17 @@ for idx, (x0, y0) in enumerate(initial_conditions):
     style = styles[idx % len(styles)]
     color = colors[idx % len(colors)]
     ax.plot(x, y, linestyle=style, color=color, linewidth=1.5)
+    # start and end markers
+    ax.plot(x[0], y[0], marker='o', color=color, markersize=4)
+    ax.plot(x[-1], y[-1], marker='x', color=color, markersize=5)
+    # add direction arrows along curve
+    step = len(x) // 10
+    for j in range(step, len(x), step):
+        dx = x[j] - x[j - step]
+        dy = y[j] - y[j - step]
+        ax.annotate('', xy=(x[j], y[j]), xytext=(x[j - step], y[j - step]),
+                    arrowprops=dict(arrowstyle='->', color=color, lw=1))
+    # label at end
     ax.text(x[-1], y[-1], f"({x0:.3f},{y0:.3f})", fontsize=8)
 
 st.pyplot(fig)
@@ -72,14 +83,15 @@ st.markdown("---")
 st.markdown("**System of ODEs:**")
 st.latex(r"""
 \begin{cases}
-\frac{dx}{dt} = \frac{K\,x^{1/\alpha}}{b^{1/\alpha} + x^{1/\alpha}} \;-\; \gamma_1\,x,\\[6pt]
-\frac{dy}{dt} = \frac{K\,y^{1/\alpha}}{b^{1/\alpha} + y^{1/\alpha}} \;-\; \gamma_2\,y.
+\frac{dx}{dt} = \frac{K\,x^{1/\alpha}}{b^{1/\alpha} + x^{1/\alpha}} \;\-\; \gamma_1\,x,\\[6pt]
+\frac{dy}{dt} = \frac{K\,y^{1/\alpha}}{b^{1/\alpha} + y^{1/\alpha}} \;\-\; \gamma_2\,y.
 \end{cases}
 """)
 st.markdown("""
 - Solver: DOP853, N = 500 points.
 - Initial conditions on circle of radius R.
 - Parameters gamma1, gamma2, K, and alpha selectable.
+- Start point ●, end point ×. Arrows indicate direction of motion.
 """)
 
 # Footer title
