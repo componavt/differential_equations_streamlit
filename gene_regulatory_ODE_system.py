@@ -21,6 +21,11 @@ gamma2 = st.sidebar.slider("Gamma 2", min_value=0.0, max_value=5.0, step=0.1, va
 K = st.sidebar.slider("K", min_value=0.1, max_value=5.0, step=0.1, value=1.0)
 alpha = st.sidebar.selectbox("Alpha", options=[0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001], index=2)
 
+# Parameter b with fine granularity near 1.0
+b_values = [0.9, 0.99, 0.999, 0.9999, 1.0, 1.0001, 1.001, 1.01, 1.1] + list(np.round(np.arange(0.0, 3.1, 0.1), 3))
+b_values = sorted(set(b_values))
+b = st.sidebar.select_slider("Parameter b", options=b_values, value=1.0)
+
 # Initial circle parameters
 num_points = st.sidebar.slider("Number of trajectories", min_value=3, max_value=50, step=1, value=12)
 initial_radius = st.sidebar.select_slider(
@@ -31,7 +36,6 @@ initial_radius = st.sidebar.select_slider(
 # --- Define RHS from notebook ---
 def get_rhs(t, state):
     x, y = state
-    b = 1.0
     dxdt = (K * x**(1 / alpha)) / (b**(1 / alpha) + x**(1 / alpha)) - gamma1 * x
     dydt = (K * y**(1 / alpha)) / (b**(1 / alpha) + y**(1 / alpha)) - gamma2 * y
     return [dxdt, dydt]
@@ -42,7 +46,7 @@ initial_conditions = [(initial_radius * np.cos(a), initial_radius * np.sin(a)) f
 
 # --- Plotting ---
 fig, ax = plt.subplots(figsize=(8, 6))
-title = f"DOP853, t_end={t_end}, K={K}, α={alpha}, γ1={gamma1}, γ2={gamma2}, R={initial_radius}, n={num_points}"
+title = f"DOP853, t_end={t_end}, K={K}, α={alpha}, b={b}, γ1={gamma1}, γ2={gamma2}, R={initial_radius}, n={num_points}"
 ax.set_title(title)
 ax.set_xlabel("x(t)")
 ax.set_ylabel("y(t)")
@@ -90,7 +94,7 @@ st.latex(r"""
 st.markdown("""
 - Solver: DOP853, N = 500 points.
 - Initial conditions on circle of radius R.
-- Parameters gamma1, gamma2, K, and alpha selectable.
+- Parameters gamma1, gamma2, K, alpha, and b selectable.
 - Start point ●, end point ×. Arrows indicate direction of motion.
 """)
 
