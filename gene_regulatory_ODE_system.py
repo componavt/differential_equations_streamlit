@@ -18,6 +18,8 @@ t_eval = np.linspace(0, t_end, N)
 # Gene-regulatory parameters as sliders
 gamma1 = st.sidebar.slider("Gamma 1", min_value=0.0, max_value=5.0, step=0.1, value=1.0)
 gamma2 = st.sidebar.slider("Gamma 2", min_value=0.0, max_value=5.0, step=0.1, value=1.0)
+K = st.sidebar.slider("K", min_value=0.1, max_value=5.0, step=0.1, value=1.0)
+alpha = st.sidebar.selectbox("Alpha", options=[0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001], index=2)
 
 # Initial circle parameters
 num_points = st.sidebar.slider("Number of trajectories", min_value=3, max_value=50, step=1, value=12)
@@ -26,14 +28,12 @@ initial_radius = st.sidebar.select_slider(
     options=[0.001] + list(np.round(np.arange(0.01, 0.11, 0.01), 2)) + [0.2, 0.3]
 )
 
-# --- Define RHS from existing notebook ---
-# TODO: paste the get_rhs function body from 99_DOP853_round3_float32.ipynb here
-# For example:
+# --- Define RHS from notebook ---
 def get_rhs(t, state):
     x, y = state
-    # Example placeholder dynamics; replace with actual model
-    dxdt = -gamma1 * x + y**2 / (1 + y**2)
-    dydt = -gamma2 * y + x**2 / (1 + x**2)
+    b = 1.0
+    dxdt = (K * x**(1 / alpha)) / (b**(1 / alpha) + x**(1 / alpha)) - gamma1 * x
+    dydt = (K * y**(1 / alpha)) / (b**(1 / alpha) + y**(1 / alpha)) - gamma2 * y
     return [dxdt, dydt]
 
 # --- Compute initial points on circle ---
@@ -42,14 +42,12 @@ initial_conditions = [(initial_radius * np.cos(a), initial_radius * np.sin(a)) f
 
 # --- Plotting ---
 fig, ax = plt.subplots(figsize=(8, 6))
-# Build title with parameters
-title = f"Gene ODE: DOP853, t_end={t_end}, \u03B3₁={gamma1}, \u03B3₂={gamma2}, R={initial_radius}, n={num_points}"
+title = f"DOP853, t_end={t_end}, K={K}, α={alpha}, γ₁={gamma1}, γ₂={gamma2}, R={initial_radius}, n={num_points}"
 ax.set_title(title)
 ax.set_xlabel("x(t)")
 ax.set_ylabel("y(t)")
 ax.grid(True)
 
-# Define line styles and colors
 styles = ['-', '--', '-.', ':']
 colors = plt.cm.tab20.colors
 
@@ -62,11 +60,9 @@ for idx, (x0, y0) in enumerate(initial_conditions):
         t_eval=t_eval
     )
     x, y = sol.y
-
     style = styles[idx % len(styles)]
     color = colors[idx % len(colors)]
     ax.plot(x, y, linestyle=style, color=color, linewidth=1.5)
-    # Label at end point
     ax.text(x[-1], y[-1], f"({x0:.3f},{y0:.3f})", fontsize=8)
 
 st.pyplot(fig)
@@ -75,12 +71,15 @@ st.pyplot(fig)
 st.markdown("---")
 st.markdown("**System of ODEs:**")
 st.latex(r"""
-\frac{d\mathbf{x}}{dt} = f(t, \mathbf{x}); \quad f = \texttt{get_rhs}
+\begin{cases}
+\frac{dx}{dt} = \frac{K\,x^{1/\alpha}}{b^{1/\alpha} + x^{1/\alpha}} \;-\; \gamma_1\,x,\\[6pt]
+\frac{dy}{dt} = \frac{K\,y^{1/\alpha}}{b^{1/\alpha} + y^{1/\alpha}} \;-\; \gamma_2\,y.
+\end{cases}
 """)
 st.markdown("""
 - Solver: DOP853, N = 500 points.
 - Initial conditions on circle of radius R.
-- Parameters gamma1, gamma2 selectable.
+- Parameters gamma1, gamma2, K, and alpha selectable.
 """)
 
 # Footer title
