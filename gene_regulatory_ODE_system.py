@@ -1,9 +1,9 @@
+method = "DOP853"
+
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
-
-method = "DOP853"
 
 # --- Sidebar controls ---
 st.sidebar.header("Simulation Settings")
@@ -23,8 +23,9 @@ b = col3.select_slider("b", options=b_values, value=1.0)
 
 # Row 2: gamma1, gamma2
 g1, g2 = st.sidebar.columns(2)
-gamma1 = g1.slider("Gamma 1", min_value=0.0, max_value=5.0, step=0.1, value=1.0)
-gamma2 = g2.slider("Gamma 2", min_value=0.0, max_value=5.0, step=0.1, value=1.0)
+gamma_range = [round(v, 3) for v in list(np.arange(0, 1.01, 0.01)) + list(np.arange(1.1, 3.1, 0.1))]
+gamma1 = g1.select_slider("Gamma 1", options=gamma_range, value=1.0)
+gamma2 = g2.select_slider("Gamma 2", options=gamma_range, value=1.0)
 
 # Row 3: t_number, t_end
 c1, c2 = st.sidebar.columns(2)
