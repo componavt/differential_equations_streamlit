@@ -77,9 +77,11 @@ st.markdown("**System of ODEs:**")
 st.latex(r"""
 \frac{d\mathbf{x}}{dt} = f(t, \mathbf{x}); \quad f = \texttt{get_rhs}
 """)
-st.markdown("- Solver: DOP853, N = 500 points.  
-- Initial conditions on circle of radius R.  
-- Parameters gamma1, gamma2 selectable.")
+st.markdown("""
+- Solver: DOP853, N = 500 points.
+- Initial conditions on circle of radius R.
+- Parameters gamma1, gamma2 selectable.
+""")
 
 # Footer title
 st.markdown("---")
