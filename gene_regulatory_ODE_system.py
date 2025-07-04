@@ -42,7 +42,7 @@ def get_rhs(t, state):
 
 # --- Compute initial points on circle ---
 angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
-initial_conditions = [(initial_radius * np.cos(a), initial_radius * np.sin(a)) for a in angles]
+initial_conditions = [(b + initial_radius * np.cos(a), b + initial_radius * np.sin(a)) for a in angles]
 
 # --- Plotting ---
 fig, ax = plt.subplots(figsize=(8, 6))
