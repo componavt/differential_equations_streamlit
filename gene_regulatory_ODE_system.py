@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 
+from plain_text_parameters import parameters_to_text, text_to_parameters
+
 # --- Sidebar controls ---
 st.sidebar.header("Simulation Settings")
 
@@ -36,6 +38,50 @@ gamma2 = g2.select_slider("Gamma 2", options=gamma_range, value=1.0)
 rcol, ncol = st.sidebar.columns(2)
 initial_radius = rcol.select_slider("Initial radius", options=[0.001] + list(np.round(np.arange(0.01, 0.11, 0.01), 3)) + [0.2, 0.3])
 num_points = ncol.slider("Number of trajectories", min_value=3, max_value=50, step=1, value=12)
+
+# Collect parameters into dictionary
+params = {
+    "t_number": t_number,
+    "t_end": t_end,
+    "alpha": alpha,
+    "K": K,
+    "b": b,
+    "gamma1": gamma1,
+    "gamma2": gamma2,
+    "initial_radius": initial_radius,
+    "num_points": num_points
+}
+
+# Convert to plain text
+param_text_default = parameters_to_text(params)
+
+# Use session state for editable text field
+if "param_text" not in st.session_state:
+    st.session_state.param_text = param_text_default
+
+# Always update session text when sliders change
+st.session_state.param_text = parameters_to_text(params)
+
+# Text area to show and edit parameters
+param_text_input = st.sidebar.text_area("Parameters (plain text)", value=st.session_state.param_text, height=100)
+
+# Button to parse text and update sliders
+if st.sidebar.button("Apply parameters from text"):
+    parsed_params = text_to_parameters(param_text_input)
+    if parsed_params:
+        # Update session state values so sliders update
+        st.session_state.param_text = param_text_input
+        # Force assign parsed values to variables
+        t_number = int(parsed_params.get("t_number", t_number))
+        t_end = float(parsed_params.get("t_end", t_end))
+        alpha = float(parsed_params.get("alpha", alpha))
+        K = float(parsed_params.get("K", K))
+        b = float(parsed_params.get("b", b))
+        gamma1 = float(parsed_params.get("gamma1", gamma1))
+        gamma2 = float(parsed_params.get("gamma2", gamma2))
+        initial_radius = float(parsed_params.get("initial_radius", initial_radius))
+        num_points = int(parsed_params.get("num_points", num_points))
+        t_eval = np.linspace(0, t_end, t_number)
 
 # --- Robust RHS with overflow handling ---
 def get_rhs_safe(t, state):
@@ -101,7 +147,7 @@ st.pyplot(fig)
 
 # --- Parameters report ---
 st.markdown("**Parameters used in this run:**")
-st.text(f"DOP853, t_end={t_end}, K={K}, α={alpha}, b={b}, γ1={gamma1}, γ2={gamma2}, R={initial_radius}, n={num_points}, pts={t_number}")
+st.text(parameters_to_text(params))
 
 # --- Explanations below ---
 st.markdown("---")
