@@ -1,6 +1,5 @@
 # plain_text_parameters.py
 # Utility functions to convert parameters <-> plain text
-# All comments are in English by request.
 
 from typing import Dict, Any
 
