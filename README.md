@@ -22,9 +22,6 @@ Explore numerical solutions to a system of ODEs modeling gene regulation using d
 gene_regulatory_ODE_system.py - Main file
 └── plain_text_parameters.py - Parameters in plain text (copy / paste)
 
-- **gene_regulatory_ODE_system.py** - Main application file with ODE solver and visualization
-- **└── plain_text_parameters.py** - Utility module for parameter serialization/deserialization
-
 ## 🎯 Parameter Set Example
 
 Use this parameter combination to observe specific dynamic behavior:
