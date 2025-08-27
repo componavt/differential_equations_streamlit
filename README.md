@@ -23,7 +23,7 @@ gene_regulatory_ODE_system.py - Main file
 └── plain_text_parameters.py - Parameters in plain text (copy / paste)
 
 - **gene_regulatory_ODE_system.py** - Main application file with ODE solver and visualization
-- **plain_text_parameters.py** - Utility module for parameter serialization/deserialization
+- **└── plain_text_parameters.py** - Utility module for parameter serialization/deserialization
 
 ## 🎯 Parameter Set Example
 
