@@ -19,8 +19,8 @@ Explore numerical solutions to a system of ODEs modeling gene regulation using d
 
 ## 📁 Project Structure
 
-# **gene_regulatory_ODE_system.py - Main file
-# **└── plain_text_parameters.py - Parameters in plain text (copy / paste)
+- **gene_regulatory_ODE_system.py - Main file
+- **└── plain_text_parameters.py - Parameters in plain text (copy / paste)
 
 ## 🎯 Parameter Set Example
 
