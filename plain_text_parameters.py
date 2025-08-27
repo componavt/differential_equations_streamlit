@@ -17,6 +17,8 @@ def text_to_parameters(text: str) -> dict:
                 key = key.strip()
                 val = val.strip()
                 if key:
+                    if key in ["circle_start", "circle_end"]:
+                        result[key] = float(val)
                     # Try to cast to int or float
                     if val.isdigit():
                         result[key] = int(val)
