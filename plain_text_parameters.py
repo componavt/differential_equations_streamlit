@@ -1,4 +1,4 @@
-# plain_text_parameters.py
+# plain_text_parameters5.py
 # Utility functions to convert parameters <-> plain text
 
 from typing import Dict, Any
@@ -27,7 +27,6 @@ def _fmt_value(v: Any) -> str:
         return str(v)
     try:
         fv = float(v)
-        # Use general format and strip trailing zeros
         s = ("%g" % fv)
         return s
     except Exception:
@@ -36,7 +35,6 @@ def _fmt_value(v: Any) -> str:
 
 # --- Convert dictionary to plain text ---
 def parameters_to_text(params: Dict[str, Any]) -> str:
-    # Emit keys in the preferred order and then any extras
     parts = []
     used = set()
     for k in _ORDER:
@@ -59,7 +57,6 @@ def text_to_parameters(text: str) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
     if not isinstance(text, str):
         return result
-    # Normalize separators
     raw = text.replace("\n", ";")
     for chunk in raw.split(";"):
         if "=" not in chunk:
@@ -69,16 +66,12 @@ def text_to_parameters(text: str) -> Dict[str, Any]:
         val = val.strip()
         if not key:
             continue
-        # Remove a trailing degree sign if someone pasted it (e.g., "90°")
         if val.endswith("°"):
             val = val[:-1]
-        # Try to cast to int first (including negatives), then float
         try:
             if val.lower().startswith("0x"):
-                # hex int support (rare)
                 result[key] = int(val, 16)
             else:
-                # int cast (handles +/-, spaces trimmed)
                 iv = int(val)
                 result[key] = iv
                 continue
@@ -90,6 +83,5 @@ def text_to_parameters(text: str) -> Dict[str, Any]:
             continue
         except Exception:
             pass
-        # Fallback to raw string
         result[key] = val
     return result
