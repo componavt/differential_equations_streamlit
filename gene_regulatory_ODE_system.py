@@ -39,6 +39,9 @@ rcol, ncol = st.sidebar.columns(2)
 initial_radius = rcol.select_slider("Initial radius", options=[0.001] + list(np.round(np.arange(0.01, 0.11, 0.01), 3)) + [0.2, 0.3])
 num_points = ncol.slider("Number of trajectories", min_value=3, max_value=50, step=1, value=12)
 
+circle_start_end = st.sidebar.slider("Sector on circle (degrees)", 0, 360, (0, 360), step=1)
+circle_start, circle_end = circle_start_end
+
 # Collect parameters into dictionary
 params = {
     "t_number": t_number,
@@ -49,7 +52,9 @@ params = {
     "gamma1": gamma1,
     "gamma2": gamma2,
     "initial_radius": initial_radius,
-    "num_points": num_points
+    "num_points": num_points,
+    "circle_start": circle_start,
+    "circle_end": circle_end
 }
 
 # Convert to plain text
@@ -81,6 +86,8 @@ if st.sidebar.button("Apply parameters from text"):
         gamma2 = float(parsed_params.get("gamma2", gamma2))
         initial_radius = float(parsed_params.get("initial_radius", initial_radius))
         num_points = int(parsed_params.get("num_points", num_points))
+        circle_start = float(parsed_params.get("circle_start", circle_start))
+        circle_end = float(parsed_params.get("circle_end", circle_end))
         t_eval = np.linspace(0, t_end, t_number)
 
 # --- Robust RHS with overflow handling ---
@@ -109,8 +116,10 @@ def get_rhs_safe(t, state):
     dydt = frac_y - gamma2 * y
     return [dxdt, dydt]
 
-# --- Compute initial points on circle centered at (b,b) ---
+# --- Compute initial points on circle (sector) centered at (b,b) ---
 angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
+circle_start = float(parsed_params.get("circle_start", circle_start))
+circle_end = float(parsed_params.get("circle_end", circle_end))
 initial_conditions = [(b + initial_radius * np.cos(a), b + initial_radius * np.sin(a)) for a in angles]
 
 # --- Plotting ---
