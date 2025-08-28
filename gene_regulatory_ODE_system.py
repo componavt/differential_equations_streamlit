@@ -4,17 +4,21 @@ import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 import pandas as pd
 
-# Try to import the plain-text helpers from either module name (flexible for canvas filenames)
+from plain_text_parameters import parameters_to_text, text_to_parameters
+
+# Try to import AgGrid; if unavailable, we'll fall back to multiselect
 try:
-    from plain_text_parameters7 import parameters_to_text, text_to_parameters
+    from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+    AGGRID_AVAILABLE = True
 except Exception:
-    from plain_text_parameters import parameters_to_text, text_to_parameters
+    AGGRID_AVAILABLE = False
 
 # --------------------------------------------------
-# gene_regulatory_ODE_system
-# - Adds optional per-trajectory metrics (FTLE estimate, amplitude) and
-#   a UI to select which trajectories to display.
-# - Two buttons for copying parameters: text -> widgets and widgets -> text.
+# gene_regulatory_ODE_system7 (updated)
+# - Uses AgGrid (if available) for interactive row selection of trajectories.
+# - Annotates each trajectory's final point with its idx so user can map table <-> curve.
+# - Removes the redundant pandas index column in the table (AgGrid displays only columns).
+# - If AgGrid is not installed, falls back to multiselect with a helpful message.
 # --------------------------------------------------
 
 # Default parameter values (used as widget defaults and fallbacks)
@@ -246,23 +250,34 @@ for idx, (x0, y0) in enumerate(initial_conditions):
             ftle = np.nan
     metrics.append({"idx": idx, "ftle": ftle, "amp": amp, "final_dist": final_d})
 
-# Build labels for UI (showing small summary per trajectory)
-labels = []
-for m in metrics:
-    ft = m.get("ftle")
-    amp = m.get("amp")
-    if np.isfinite(ft):
-        lbl = f"{m['idx']}: FTLE={ft:.4g}, amp={amp:.4g}"
+# Build DataFrame for display
+df_metrics = pd.DataFrame(metrics)
+# Remove the default pandas index in displays by using AgGrid (it shows columns only)
+
+# Build labels (for fallback UI) and mapping
+labels = [f"{row['idx']}: FTLE={row['ftle']:.4g}, amp={row['amp']:.4g}" if np.isfinite(row['ftle']) else f"{row['idx']}: FTLE=nan, amp={row['amp']:.4g}" for row in metrics]
+
+# Selection UI: replace multiselect by AgGrid if available
+selected_idx = set(range(len(solutions)))  # default: all
+if AGGRID_AVAILABLE:
+    st.sidebar.markdown("**Select trajectories to display (AgGrid)**")
+    gb = GridOptionsBuilder.from_dataframe(df_metrics)
+    gb.configure_selection(selection_mode='multiple', use_checkbox=True, rowMultiSelectWithClick=True)
+    gb.configure_column('idx', header_name='idx', width=80)
+    gridOptions = gb.build()
+    grid_response = AgGrid(df_metrics, gridOptions=gridOptions, height=250, update_mode=GridUpdateMode.SELECTION_CHANGED)
+    selected = grid_response.get('selected_rows', [])
+    if selected:
+        selected_idx = {int(r['idx']) for r in selected}
     else:
-        lbl = f"{m['idx']}: FTLE=nan, amp={amp:.4g}"
-    labels.append(lbl)
+        # if nothing selected, default to all
+        selected_idx = set(range(len(solutions)))
+else:
+    st.sidebar.warning("st_aggrid not installed — falling back to multiselect. For better UX, install 'streamlit-aggrid'.")
+    selected = st.sidebar.multiselect("Select trajectories to display (fallback)", options=labels, default=labels)
+    selected_idx = {int(s.split(':', 1)[0]) for s in selected}
 
-# Selection UI: allow user to toggle which trajectories to display
-# For many trajectories a multiselect is preferable to creating dozens of checkboxes.
-selected = st.sidebar.multiselect("Select trajectories to display", options=labels, default=labels)
-selected_idx = {int(s.split(":", 1)[0]) for s in selected}
-
-# --- Plot only selected trajectories ---
+# --- Plot only selected trajectories and annotate final point with idx ---
 fig, ax = plt.subplots(figsize=(8, 6))
 styles = ['-', '--', '-.', ':']
 colors = plt.cm.tab20.colors
@@ -273,7 +288,9 @@ for m, (x, y) in enumerate(solutions):
     color = colors[m % len(colors)]
     ax.plot(x, y, linestyle=style, color=color, linewidth=1.2)
     ax.plot(x[0], y[0], 'o', color=color, markersize=4)
-    ax.plot(x[-1], y[-1], 'x', color=color, markersize=5)
+    ax.plot(x[-1], y[-1], 'x', color=color, markersize=6)
+    # Annotate final point with idx (offset slightly)
+    ax.text(x[-1] + 0.01 * np.sign(x[-1] if x[-1]!=0 else 1), y[-1] + 0.01, f"{m}", fontsize=8, color=color)
 
 ax.set_title(f"Gene regulatory trajectories — t_end={te}, t_points={tn}")
 ax.set_xlabel("x(t)")
@@ -281,13 +298,16 @@ ax.set_ylabel("y(t)")
 ax.grid(True)
 st.pyplot(fig)
 
-# Show metrics table if computed
-if compute_metrics:
-    df = pd.DataFrame(metrics)
-    st.markdown("**Per-trajectory metrics (FTLE estimate, amplitude, final distance)**")
-    st.dataframe(df)
+# Show metrics table
+st.markdown("**Per-trajectory metrics (FTLE estimate, amplitude, final distance)**")
+if AGGRID_AVAILABLE:
+    # show AgGrid again as a table without selection controls
+    gb2 = GridOptionsBuilder.from_dataframe(df_metrics)
+    gb2.configure_default_column(resizable=True)
+    AgGrid(df_metrics, gridOptions=gb2.build(), height=250)
 else:
-    st.markdown("(Per-trajectory metrics disabled — enable 'Compute per-trajectory metrics' in the sidebar to compute FTLE and amplitude.)")
+    # st.dataframe will show columns without the redundant pandas index column
+    st.dataframe(df_metrics)
 
 # Show textual report of current parameters
 st.markdown("**Parameters currently used:**")
@@ -295,10 +315,10 @@ st.text(parameters_to_text(collect_params_from_widgets()))
 
 # Footer and notes
 st.markdown("---")
-st.markdown("**Notes on metrics and UI design choices:**")
-st.markdown("- FTLE is estimated by integrating a slightly perturbed initial condition and fitting the slope of ln(distance) vs time over the central portion of the trajectory. It is a finite-time, approximate measure and may be noisy.")
-st.markdown("- For many trajectories, using `st.sidebar.multiselect` is more scalable than creating dozens of individual checkboxes. If you prefer individual toggles, we can generate a compact grid of checkboxes, but it may slow UI rendering.")
-st.markdown("- This per-trajectory analysis is an intermediate step toward building training data / diagnostics for neural solvers (e.g., label high-FTLE trajectories as 'sensitive', use metrics as features).")
+st.markdown("**Notes on mapping table <-> curve and UI choices:**")
+st.markdown("- Each plotted curve now has its `idx` annotated at its final point so you can easily map the table row to the curve.")
+st.markdown("- The AgGrid view shows only columns (no redundant pandas index column). Selecting rows in AgGrid controls which trajectories are displayed.")
+st.markdown("- If AgGrid isn't available, the app falls back to multiselect, but note that removing items from multiselect hides them from the options list; AgGrid avoids that UX problem.")
 
 st.markdown("---")
 st.markdown("**System of ODEs (safe):**")
