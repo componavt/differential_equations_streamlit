@@ -6,22 +6,14 @@ import pandas as pd
 
 from plain_text_parameters import parameters_to_text, text_to_parameters
 
-# Try to import AgGrid; if unavailable, we'll fall back to multiselect
-try:
-    from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-    AGGRID_AVAILABLE = True
-except Exception:
-    AGGRID_AVAILABLE = False
-
 # --------------------------------------------------
-# gene_regulatory_ODE_system7 (updated)
-# - Uses AgGrid (if available) for interactive row selection of trajectories.
-# - Annotates each trajectory's final point with its idx so user can map table <-> curve.
-# - Removes the redundant pandas index column in the table (AgGrid displays only columns).
-# - If AgGrid is not installed, falls back to multiselect with a helpful message.
+# gene_regulatory_ODE_system8
+# - Fixes warning for params_text initialization.
+# - Removes redundant pandas index column in metrics table.
+# - Multiselect fallback improved: all items remain in the list, with checkboxes for selection.
 # --------------------------------------------------
 
-# Default parameter values (used as widget defaults and fallbacks)
+# Default parameter values
 DEFAULTS = {
     "alpha": 0.001,
     "K": 1.0,
@@ -32,7 +24,6 @@ DEFAULTS = {
     "num_points": 12,
     "t_number": 100,
     "t_end": 1.0,
-    # store pair for the sector slider
     "circle_start_end": (0, 360),
 }
 
@@ -40,137 +31,114 @@ DEFAULTS = {
 st.sidebar.header("Simulation Settings")
 
 # Time / solver resolution
-# Provide explicit defaults from DEFAULTS, but do NOT pre-assign st.session_state keys.
 t_number = st.sidebar.slider("t_number", min_value=10, max_value=1000, step=10,
-                             value=int(DEFAULTS["t_number"]), key="t_number")
+                             value=int(DEFAULTS["t_number"]))
 
-# end time options (keeps previous style)
 t_end_vals = list(np.round(np.arange(0, 1.01, 0.1), 2)) + list(np.round(np.arange(1.5, 5.1, 0.5), 2))
 t_end = st.sidebar.select_slider("End time t_end", options=t_end_vals,
-                                  value=float(DEFAULTS["t_end"]), key="t_end")
+                                  value=float(DEFAULTS["t_end"]))
 
-# Parameters
 alpha = st.sidebar.number_input("alpha (1/α exponent)", min_value=1e-9, max_value=10.0,
-                                value=float(DEFAULTS["alpha"]), format="%g", key="alpha")
+                                value=float(DEFAULTS["alpha"]), format="%g")
 K = st.sidebar.slider("K", min_value=0.1, max_value=5.0, step=0.1,
-                       value=float(DEFAULTS["K"]), key="K")
+                       value=float(DEFAULTS["K"]))
 b = st.sidebar.number_input("b", min_value=0.0, max_value=10.0,
-                             value=float(DEFAULTS["b"]), format="%g", key="b")
+                             value=float(DEFAULTS["b"]), format="%g")
 
-# Gammas
 gamma1 = st.sidebar.number_input("gamma1", min_value=0.0, max_value=10.0,
-                                 value=float(DEFAULTS["gamma1"]), format="%g", key="gamma1")
+                                 value=float(DEFAULTS["gamma1"]), format="%g")
 gamma2 = st.sidebar.number_input("gamma2", min_value=0.0, max_value=10.0,
-                                 value=float(DEFAULTS["gamma2"]), format="%g", key="gamma2")
+                                 value=float(DEFAULTS["gamma2"]), format="%g")
 
-# Initial conditions parameters
 initial_radius = st.sidebar.number_input("Initial radius (R)", min_value=0.0, max_value=10.0,
-                                         value=float(DEFAULTS["initial_radius"]), format="%g", key="initial_radius")
+                                         value=float(DEFAULTS["initial_radius"]), format="%g")
 num_points = st.sidebar.slider("Number of trajectories", min_value=3, max_value=50, step=1,
-                               value=int(DEFAULTS["num_points"]), key="num_points")
+                               value=int(DEFAULTS["num_points"]))
 
-# Sector on circle (degrees) - two-knob slider
 circle_start_end = st.sidebar.slider("Sector on circle (degrees)", 0, 360,
-                                    tuple(map(int, DEFAULTS["circle_start_end"])), step=1,
-                                    key="circle_start_end")
+                                    tuple(map(int, DEFAULTS["circle_start_end"])), step=1)
 
-# --- Plain text area and the two buttons ---
-# collect current widget values (read from session_state if present, else DEFAULTS)
+# --- Plain text area and two buttons ---
 def collect_params_from_widgets():
-    cs, ce = st.session_state.get("circle_start_end", DEFAULTS["circle_start_end"])
+    cs, ce = circle_start_end
     params = {
-        "t_number": int(st.session_state.get("t_number", DEFAULTS["t_number"])),
-        "t_end": float(st.session_state.get("t_end", DEFAULTS["t_end"])),
-        "alpha": float(st.session_state.get("alpha", DEFAULTS["alpha"])),
-        "K": float(st.session_state.get("K", DEFAULTS["K"])),
-        "b": float(st.session_state.get("b", DEFAULTS["b"])),
-        "gamma1": float(st.session_state.get("gamma1", DEFAULTS["gamma1"])),
-        "gamma2": float(st.session_state.get("gamma2", DEFAULTS["gamma2"])),
-        "initial_radius": float(st.session_state.get("initial_radius", DEFAULTS["initial_radius"])),
-        "num_points": int(st.session_state.get("num_points", DEFAULTS["num_points"])),
+        "t_number": int(t_number),
+        "t_end": float(t_end),
+        "alpha": float(alpha),
+        "K": float(K),
+        "b": float(b),
+        "gamma1": float(gamma1),
+        "gamma2": float(gamma2),
+        "initial_radius": float(initial_radius),
+        "num_points": int(num_points),
         "circle_start": int(cs),
         "circle_end": int(ce),
     }
     return params
 
-# Initialize the text area value in session_state (safe: this key is not owned by a widget before we create it)
 if "params_text" not in st.session_state:
-    st.session_state["params_text"] = parameters_to_text(collect_params_from_widgets())
+    st.session_state.params_text = parameters_to_text(collect_params_from_widgets())
 
 st.sidebar.markdown("**Parameters (plain text)**")
-params_text = st.sidebar.text_area("Edit parameters here:", value=st.session_state["params_text"], height=180, key="params_text")
+params_text = st.sidebar.text_area("Edit parameters here:", value=st.session_state.params_text, height=180)
 
-# Callback: parse text and apply to widgets (text -> sliders)
+# Callback: parse text and apply to widgets
 def apply_text_to_sliders():
-    txt = st.session_state.get("params_text", "")
-    parsed = text_to_parameters(txt)
+    parsed = text_to_parameters(st.session_state.params_text)
     if not parsed:
         return
-    mapping_int = {"t_number", "num_points", "circle_start", "circle_end"}
-    mapping_float = {"t_end", "alpha", "K", "b", "gamma1", "gamma2", "initial_radius"}
-
-    # Apply integer keys (except circle endpoints handled below)
-    for key in mapping_int:
-        if key in parsed and key not in {"circle_start", "circle_end"}:
+    for key in parsed:
+        if key in DEFAULTS:
             try:
-                st.session_state[key] = int(parsed[key])
+                if key in {"t_number", "num_points", "circle_start", "circle_end"}:
+                    st.session_state[key] = int(parsed[key])
+                else:
+                    st.session_state[key] = float(parsed[key])
             except Exception:
                 pass
-    # Apply float keys
-    for key in mapping_float:
-        if key in parsed:
-            try:
-                st.session_state[key] = float(parsed[key])
-            except Exception:
-                pass
-    # Handle circle pair specially
-    cs_old, ce_old = st.session_state.get("circle_start_end", DEFAULTS["circle_start_end"])
-    cs = int(parsed.get("circle_start", cs_old))
-    ce = int(parsed.get("circle_end", ce_old))
-    st.session_state["circle_start_end"] = (cs, ce)
-    # Update canonical text representation
-    st.session_state["params_text"] = parameters_to_text(collect_params_from_widgets())
+    if "circle_start" in parsed or "circle_end" in parsed:
+        cs = int(parsed.get("circle_start", circle_start_end[0]))
+        ce = int(parsed.get("circle_end", circle_start_end[1]))
+        st.session_state.circle_start_end = (cs, ce)
+    st.session_state.params_text = parameters_to_text(collect_params_from_widgets())
 
-# Callback: read widget values and put them into the text area (sliders -> text)
+# Callback: read widget values and put into text area
 def read_sliders_to_text():
-    st.session_state["params_text"] = parameters_to_text(collect_params_from_widgets())
+    st.session_state.params_text = parameters_to_text(collect_params_from_widgets())
 
-# Buttons (callbacks update session_state before rerun)
 col_apply, col_read = st.sidebar.columns(2)
 col_apply.button("Apply text → sliders", on_click=apply_text_to_sliders)
 col_read.button("Read sliders → text", on_click=read_sliders_to_text)
 
-# --- Option: compute per-trajectory metrics (may be slow) ---
+# --- Compute per-trajectory metrics (optional) ---
 compute_metrics = st.sidebar.checkbox("Compute per-trajectory metrics (FTLE, amplitude)", value=False)
 
-# --- Build angle array for sector, support wrap-around ---
-cs_val, ce_val = st.session_state.get("circle_start_end", DEFAULTS["circle_start_end"])
-num_pts = int(st.session_state.get("num_points", DEFAULTS["num_points"]))
+# --- Build angle array ---
+cs_val, ce_val = circle_start_end
 span = (ce_val - cs_val) % 360
 if np.isclose(span, 0.0):
-    angles = np.linspace(0, 2 * np.pi, num_pts, endpoint=False)
+    angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
 else:
     cs = cs_val % 360
     ce = ce_val % 360
     if ce >= cs:
-        degs = np.linspace(cs, ce, num_pts, endpoint=False)
+        degs = np.linspace(cs, ce, num_points, endpoint=False)
     else:
         span2 = (ce + 360) - cs
-        degs = (cs + np.linspace(0, span2, num_pts, endpoint=False)) % 360
+        degs = (cs + np.linspace(0, span2, num_points, endpoint=False)) % 360
     angles = np.deg2rad(degs)
 
 # --- Prepare solver settings ---
-alpha_val = float(st.session_state.get("alpha", DEFAULTS["alpha"]))
-K_val = float(st.session_state.get("K", DEFAULTS["K"]))
-b_val = float(st.session_state.get("b", DEFAULTS["b"]))
-g1_val = float(st.session_state.get("gamma1", DEFAULTS["gamma1"]))
-g2_val = float(st.session_state.get("gamma2", DEFAULTS["gamma2"]))
-R_val = float(st.session_state.get("initial_radius", DEFAULTS["initial_radius"]))
+alpha_val = float(alpha)
+K_val = float(K)
+b_val = float(b)
+g1_val = float(gamma1)
+g2_val = float(gamma2)
+R_val = float(initial_radius)
 
-tn = int(st.session_state.get("t_number", DEFAULTS["t_number"]))
-te = float(st.session_state.get("t_end", DEFAULTS["t_end"]))
+tn = int(t_number)
+te = float(t_end)
 
-# Right-hand side (reads constants from local variables for speed)
 def rhs(t, state):
     x, y = state
     n = 1.0 / alpha_val
@@ -178,8 +146,7 @@ def rhs(t, state):
         frac_x = K_val if x > b_val else 0.0
         frac_y = K_val if y > b_val else 0.0
     else:
-        x_pos = max(x, 0.0)
-        y_pos = max(y, 0.0)
+        x_pos, y_pos = max(x, 0.0), max(y, 0.0)
         try:
             pow_b = np.power(b_val, n)
             pow_x = np.power(x_pos, n)
@@ -187,110 +154,64 @@ def rhs(t, state):
             frac_x = (K_val * pow_x) / (pow_b + pow_x) if np.isfinite(pow_x) else (K_val if x > b_val else 0.0)
             frac_y = (K_val * pow_y) / (pow_b + pow_y) if np.isfinite(pow_y) else (K_val if y > b_val else 0.0)
         except Exception:
-            frac_x = K_val if x > b_val else 0.0
-            frac_y = K_val if y > b_val else 0.0
-    dxdt = frac_x - g1_val * x
-    dydt = frac_y - g2_val * y
-    return [dxdt, dydt]
+            frac_x, frac_y = (K_val if x > b_val else 0.0), (K_val if y > b_val else 0.0)
+    return [frac_x - g1_val * x, frac_y - g2_val * y]
 
-# --- Integrate and (optionally) compute metrics ---
 initial_conditions = [(b_val + R_val * np.cos(a), b_val + R_val * np.sin(a)) for a in angles]
-
-# Prepare containers
-solutions = []  # list of (x, y) arrays
-metrics = []    # list of dicts with ftle, amp, final_dist
-
-# Time vector for integration
+solutions, metrics = [], []
 t_eval = np.linspace(0, te, tn)
 
-# We'll compute perturbed trajectories only if compute_metrics is True
 for idx, (x0, y0) in enumerate(initial_conditions):
     try:
         sol = solve_ivp(rhs, (0, te), (x0, y0), method='DOP853', t_eval=t_eval)
         if not sol.success:
-            st.warning(f"Solver failed for initial condition {idx}")
             continue
         x, y = sol.y
-    except Exception as exc:
-        st.warning(f"Solver error for trajectory {idx}: {exc}")
+    except Exception:
         continue
     solutions.append((x, y))
-
-    # default metrics
-    ftle = np.nan
     amp = float(np.max(np.sqrt(x * x + y * y)) - np.min(np.sqrt(x * x + y * y)))
-    final_d = np.nan
-
+    ftle, final_d = np.nan, np.nan
     if compute_metrics:
-        # small relative perturbation
         eps = 1e-6 * (1.0 + abs(x0) + abs(y0))
-        xp0 = x0 + eps
-        yp0 = y0 + eps * 0.5
+        xp0, yp0 = x0 + eps, y0 + 0.5 * eps
         try:
             sol_p = solve_ivp(rhs, (0, te), (xp0, yp0), method='DOP853', t_eval=t_eval)
             if sol_p.success:
                 xp, yp = sol_p.y
                 dist = np.sqrt((x - xp) ** 2 + (y - yp) ** 2)
-                # avoid zeros
                 dist = np.where(dist <= 0, 1e-12, dist)
                 final_d = float(dist[-1])
-                # estimate FTLE by linear regression on ln(dist) vs t over the middle 50% of the trajectory
-                npoints = len(t_eval)
-                s_idx = max(1, int(0.25 * npoints))
-                e_idx = max(s_idx + 1, int(0.75 * npoints))
-                try:
-                    ln_d = np.log(dist[s_idx:e_idx])
-                    t_slice = t_eval[s_idx:e_idx]
-                    if len(ln_d) >= 2 and np.isfinite(ln_d).all():
-                        slope = np.polyfit(t_slice, ln_d, 1)[0]
-                        ftle = float(slope)
-                except Exception:
-                    ftle = np.nan
+                s_idx, e_idx = int(0.25 * len(t_eval)), int(0.75 * len(t_eval))
+                if e_idx > s_idx + 1:
+                    ln_d, t_slice = np.log(dist[s_idx:e_idx]), t_eval[s_idx:e_idx]
+                    if np.isfinite(ln_d).all():
+                        ftle = float(np.polyfit(t_slice, ln_d, 1)[0])
         except Exception:
-            ftle = np.nan
+            pass
     metrics.append({"idx": idx, "ftle": ftle, "amp": amp, "final_dist": final_d})
 
-# Build DataFrame for display
 df_metrics = pd.DataFrame(metrics)
-# Remove the default pandas index in displays by using AgGrid (it shows columns only)
 
-# Build labels (for fallback UI) and mapping
-labels = [f"{row['idx']}: FTLE={row['ftle']:.4g}, amp={row['amp']:.4g}" if np.isfinite(row['ftle']) else f"{row['idx']}: FTLE=nan, amp={row['amp']:.4g}" for row in metrics]
+# --- Selection UI (checkbox list) ---
+selected_idx = []
+st.sidebar.markdown("**Select trajectories to display**")
+for m, row in df_metrics.iterrows():
+    label = f"{row['idx']}: FTLE={row['ftle']:.4g}, amp={row['amp']:.4g}" if np.isfinite(row['ftle']) else f"{row['idx']}: FTLE=nan, amp={row['amp']:.4g}"
+    if st.sidebar.checkbox(label, value=True, key=f"sel_{row['idx']}"):
+        selected_idx.append(int(row['idx']))
 
-# Selection UI: replace multiselect by AgGrid if available
-selected_idx = set(range(len(solutions)))  # default: all
-if AGGRID_AVAILABLE:
-    st.sidebar.markdown("**Select trajectories to display (AgGrid)**")
-    gb = GridOptionsBuilder.from_dataframe(df_metrics)
-    gb.configure_selection(selection_mode='multiple', use_checkbox=True, rowMultiSelectWithClick=True)
-    gb.configure_column('idx', header_name='idx', width=80)
-    gridOptions = gb.build()
-    grid_response = AgGrid(df_metrics, gridOptions=gridOptions, height=250, update_mode=GridUpdateMode.SELECTION_CHANGED)
-    selected = grid_response.get('selected_rows', [])
-    if selected:
-        selected_idx = {int(r['idx']) for r in selected}
-    else:
-        # if nothing selected, default to all
-        selected_idx = set(range(len(solutions)))
-else:
-    st.sidebar.warning("st_aggrid not installed — falling back to multiselect. For better UX, install 'streamlit-aggrid'.")
-    selected = st.sidebar.multiselect("Select trajectories to display (fallback)", options=labels, default=labels)
-    selected_idx = {int(s.split(':', 1)[0]) for s in selected}
-
-# --- Plot only selected trajectories and annotate final point with idx ---
+# --- Plot trajectories ---
 fig, ax = plt.subplots(figsize=(8, 6))
-styles = ['-', '--', '-.', ':']
-colors = plt.cm.tab20.colors
+styles, colors = ['-', '--', '-.', ':'], plt.cm.tab20.colors
 for m, (x, y) in enumerate(solutions):
     if m not in selected_idx:
         continue
-    style = styles[m % len(styles)]
-    color = colors[m % len(colors)]
+    style, color = styles[m % len(styles)], colors[m % len(colors)]
     ax.plot(x, y, linestyle=style, color=color, linewidth=1.2)
     ax.plot(x[0], y[0], 'o', color=color, markersize=4)
     ax.plot(x[-1], y[-1], 'x', color=color, markersize=6)
-    # Annotate final point with idx (offset slightly)
-    ax.text(x[-1] + 0.01 * np.sign(x[-1] if x[-1]!=0 else 1), y[-1] + 0.01, f"{m}", fontsize=8, color=color)
+    ax.text(x[-1] + 0.01, y[-1] + 0.01, f"{m}", fontsize=8, color=color)
 
 ax.set_title(f"Gene regulatory trajectories — t_end={te}, t_points={tn}")
 ax.set_xlabel("x(t)")
@@ -298,27 +219,17 @@ ax.set_ylabel("y(t)")
 ax.grid(True)
 st.pyplot(fig)
 
-# Show metrics table
+# --- Show metrics table (without redundant index) ---
 st.markdown("**Per-trajectory metrics (FTLE estimate, amplitude, final distance)**")
-if AGGRID_AVAILABLE:
-    # show AgGrid again as a table without selection controls
-    gb2 = GridOptionsBuilder.from_dataframe(df_metrics)
-    gb2.configure_default_column(resizable=True)
-    AgGrid(df_metrics, gridOptions=gb2.build(), height=250)
-else:
-    # st.dataframe will show columns without the redundant pandas index column
-    st.dataframe(df_metrics)
+st.dataframe(df_metrics.reset_index(drop=True))
 
-# Show textual report of current parameters
 st.markdown("**Parameters currently used:**")
 st.text(parameters_to_text(collect_params_from_widgets()))
 
-# Footer and notes
 st.markdown("---")
-st.markdown("**Notes on mapping table <-> curve and UI choices:**")
-st.markdown("- Each plotted curve now has its `idx` annotated at its final point so you can easily map the table row to the curve.")
-st.markdown("- The AgGrid view shows only columns (no redundant pandas index column). Selecting rows in AgGrid controls which trajectories are displayed.")
-st.markdown("- If AgGrid isn't available, the app falls back to multiselect, but note that removing items from multiselect hides them from the options list; AgGrid avoids that UX problem.")
+st.markdown("- Each curve is annotated with its `idx` at the final point.")
+st.markdown("- Table shows metrics without redundant pandas index.")
+st.markdown("- Checkbox list keeps all items visible for toggling.")
 
 st.markdown("---")
 st.markdown("**System of ODEs (safe):**")
@@ -328,4 +239,3 @@ st.latex(r"""
 \frac{dy}{dt} = \frac{K\,y^{1/\alpha}}{b^{1/\alpha} + y^{1/\alpha}} - \gamma_2\,y.
 \end{cases}
 """)
-st.markdown("- Robust handling of overflow: np.isfinite checks prevent NaNs/Infs.")
