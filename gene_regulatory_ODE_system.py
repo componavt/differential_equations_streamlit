@@ -7,10 +7,10 @@ import pandas as pd
 from plain_text_parameters import parameters_to_text, text_to_parameters
 
 # --------------------------------------------------
-# gene_regulatory_ODE_system8
-# - Fixes warning for params_text initialization.
-# - Removes redundant pandas index column in metrics table.
-# - Multiselect fallback improved: all items remain in the list, with checkboxes for selection.
+# gene_regulatory_ODE_system91
+# - Sorts checkboxes by FTLE (descending).
+# - Fixes Apply/Read buttons functionality.
+# - Saves enabled checkboxes state into text field and restores from it.
 # --------------------------------------------------
 
 # Default parameter values
@@ -74,13 +74,18 @@ def collect_params_from_widgets():
         "circle_start": int(cs),
         "circle_end": int(ce),
     }
+    # Save only enabled checkboxes if available
+    if "enabled_checkboxes" in st.session_state:
+        enabled = st.session_state.enabled_checkboxes
+        if enabled:
+            params["enabled_idx"] = ",".join(map(str, enabled))
     return params
 
 if "params_text" not in st.session_state:
     st.session_state.params_text = parameters_to_text(collect_params_from_widgets())
 
 st.sidebar.markdown("**Parameters (plain text)**")
-params_text = st.sidebar.text_area("Edit parameters here:", value=st.session_state.params_text, height=180)
+params_text = st.sidebar.text_area("Edit parameters here:", value=st.session_state.params_text, height=220, key="params_text")
 
 # Callback: parse text and apply to widgets
 def apply_text_to_sliders():
@@ -100,6 +105,9 @@ def apply_text_to_sliders():
         cs = int(parsed.get("circle_start", circle_start_end[0]))
         ce = int(parsed.get("circle_end", circle_start_end[1]))
         st.session_state.circle_start_end = (cs, ce)
+    if "enabled_idx" in parsed:
+        enabled_idx = [int(x) for x in str(parsed["enabled_idx"]).split(",") if x.strip().isdigit()]
+        st.session_state.enabled_checkboxes = enabled_idx
     st.session_state.params_text = parameters_to_text(collect_params_from_widgets())
 
 # Callback: read widget values and put into text area
@@ -193,13 +201,21 @@ for idx, (x0, y0) in enumerate(initial_conditions):
 
 df_metrics = pd.DataFrame(metrics)
 
-# --- Selection UI (checkbox list) ---
+# --- Selection UI (checkbox list, sorted by FTLE descending) ---
 selected_idx = []
-st.sidebar.markdown("**Select trajectories to display**")
-for m, row in df_metrics.iterrows():
-    label = f"{row['idx']}: FTLE={row['ftle']:.4g}, amp={row['amp']:.4g}" if np.isfinite(row['ftle']) else f"{row['idx']}: FTLE=nan, amp={row['amp']:.4g}"
-    if st.sidebar.checkbox(label, value=True, key=f"sel_{row['idx']}"):
-        selected_idx.append(int(row['idx']))
+st.sidebar.markdown("**Select trajectories to display (sorted by FTLE)**")
+
+if not df_metrics.empty:
+    df_sorted = df_metrics.sort_values(by="ftle", ascending=False, na_position="last")
+    enabled_set = set(st.session_state.get("enabled_checkboxes", []))
+    new_enabled = []
+    for m, row in df_sorted.iterrows():
+        label = f"{row['idx']}: FTLE={row['ftle']:.4g}, amp={row['amp']:.4g}" if np.isfinite(row['ftle']) else f"{row['idx']}: FTLE=nan, amp={row['amp']:.4g}"
+        default_val = row["idx"] in enabled_set if enabled_set else True
+        if st.sidebar.checkbox(label, value=default_val, key=f"sel_{row['idx']}"):
+            selected_idx.append(int(row['idx']))
+            new_enabled.append(int(row['idx']))
+    st.session_state.enabled_checkboxes = new_enabled
 
 # --- Plot trajectories ---
 fig, ax = plt.subplots(figsize=(8, 6))
@@ -229,7 +245,7 @@ st.text(parameters_to_text(collect_params_from_widgets()))
 st.markdown("---")
 st.markdown("- Each curve is annotated with its `idx` at the final point.")
 st.markdown("- Table shows metrics without redundant pandas index.")
-st.markdown("- Checkbox list keeps all items visible for toggling.")
+st.markdown("- Checkbox list sorted by FTLE descending, saves only enabled indices.")
 
 st.markdown("---")
 st.markdown("**System of ODEs (safe):**")
