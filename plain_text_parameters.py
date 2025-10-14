@@ -1,4 +1,4 @@
-# plain_text_parameters5.py
+# plain_text_parameters.py
 # Utility functions to convert parameters <-> plain text
 
 from typing import Dict, Any
@@ -16,6 +16,9 @@ _ORDER = [
     "num_points",
     "circle_start",
     "circle_end",
+    "center_x",
+    "center_y",
+    "enabled_idx",
 ]
 
 
