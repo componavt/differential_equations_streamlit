@@ -7,12 +7,14 @@ import pandas as pd
 from plain_text_parameters import parameters_to_text, text_to_parameters
 
 # --------------------------------------------------
-# gene_regulatory_ODE_system
-# - Sorts checkboxes by FTLE (descending).
-# - Fixes Apply/Read buttons functionality.
-# - Saves enabled checkboxes state into text field and restores from it.
-# - Adds Hurst exponent, curvature radius statistics, initial point tracking,
-#   and center-of-circle parameters for initial conditions.
+# gene_regulatory_ODE_system (patched v2)
+# - same as patched but STRAIGHT_DIST removed
+# - Robust curvature statistics (clip extreme radii)
+# - Path length computed and shown in metrics
+# - FTLE diagnostics include R^2 of ln(dist) fit and clipping
+# - Added additional metrics: max_kappa, frac_high_curv, curv p10/p90, curv finite count
+# - Anomaly score computed (combines FTLE, path_len, max_kappa, penalizes low R^2)
+# - Display and CSV export rounded to 3 decimal places
 # --------------------------------------------------
 
 # Default parameter values
@@ -40,7 +42,7 @@ t_end_vals = list(np.round(np.arange(0, 1.01, 0.1), 2)) + list(np.round(np.arang
 t_end = st.sidebar.select_slider("End time t_end", options=t_end_vals,
                                   value=float(DEFAULTS["t_end"]))
 
-alpha = st.sidebar.number_input("alpha (1/α exponent)", min_value=1e-9, max_value=10.0,
+alpha = st.sidebar.number_input("alpha (1/alpha exponent)", min_value=1e-9, max_value=10.0,
                                 value=float(DEFAULTS["alpha"]), format="%g")
 K = st.sidebar.slider("K", min_value=0.1, max_value=5.0, step=0.1,
                        value=float(DEFAULTS["K"]))
@@ -65,6 +67,7 @@ center_x = st.sidebar.number_input("Center X (circle center)", value=float(b), f
 center_y = st.sidebar.number_input("Center Y (circle center)", value=float(b), format="%g")
 
 # --- Plain text area and two buttons ---
+
 def collect_params_from_widgets():
     cs, ce = circle_start_end
     params = {
@@ -101,11 +104,9 @@ def apply_text_to_sliders():
     if not parsed:
         return
 
-    # Allowed numeric keys and their target types
     int_keys = {"t_number", "num_points", "circle_start", "circle_end"}
     float_keys = {"t_end", "alpha", "K", "b", "gamma1", "gamma2", "initial_radius", "center_x", "center_y"}
 
-    # Apply ints/floats into session_state where widgets expect them
     for key, val in parsed.items():
         if key in int_keys:
             try:
@@ -118,26 +119,21 @@ def apply_text_to_sliders():
             except Exception:
                 pass
         elif key == "enabled_idx":
-            # parse CSV of indices
             enabled_idx = [int(x) for x in str(val).split(",") if x.strip().isdigit()]
-            # filter by current/parsed num_points if present
             npts = int(parsed.get("num_points", st.session_state.get("num_points", num_points)))
             enabled_idx = [i for i in enabled_idx if 0 <= i < npts]
             st.session_state.enabled_checkboxes = enabled_idx
 
-    # Special handling for circle_start/circle_end pair in session_state name circle_start_end
     if "circle_start" in parsed or "circle_end" in parsed:
         cs = int(parsed.get("circle_start", circle_start_end[0]))
         ce = int(parsed.get("circle_end", circle_start_end[1]))
         st.session_state.circle_start_end = (cs, ce)
 
-    # If num_points changed, make sure enabled_checkboxes indices are valid
     if "num_points" in parsed:
         npts = int(parsed["num_points"])
         enabled = st.session_state.get("enabled_checkboxes", [])
         st.session_state.enabled_checkboxes = [i for i in enabled if 0 <= i < npts]
 
-    # finally, update the textual representation to reflect actual widgets
     st.session_state.params_text = parameters_to_text(collect_params_from_widgets())
 
 # Callback: read widget values and put into text area
@@ -149,7 +145,7 @@ col_apply.button("Apply text → sliders", on_click=apply_text_to_sliders)
 col_read.button("Read sliders → text", on_click=read_sliders_to_text)
 
 # --- Compute per-trajectory metrics (optional) ---
-compute_metrics = st.sidebar.checkbox("Compute per-trajectory metrics (FTLE, amplitude, Hurst, curvature)", value=False)
+compute_metrics = st.sidebar.checkbox("Compute per-trajectory metrics (FTLE, amplitude, Hurst, curvature, path)", value=False)
 
 # --- Build angle array ---
 cs_val, ce_val = circle_start_end
@@ -177,7 +173,6 @@ R_val = float(initial_radius)
 tn = int(t_number)
 te = float(t_end)
 
-
 def rhs(t, state):
     x, y = state
     n = 1.0 / alpha_val
@@ -196,24 +191,13 @@ def rhs(t, state):
             frac_x, frac_y = (K_val if x > b_val else 0.0), (K_val if y > b_val else 0.0)
     return [frac_x - g1_val * x, frac_y - g2_val * y]
 
-# Use center_x/center_y numeric values (if session_state has them due to apply_text)
-center_x_val = float(st.session_state.get("center_x", center_x))
-center_y_val = float(st.session_state.get("center_y", center_y))
-initial_conditions = [(center_x_val + R_val * np.cos(a), center_y_val + R_val * np.sin(a)) for a in angles]
-
 # --- Utility: Hurst exponent (R/S method) ---
 def hurst_rs(ts):
-    """
-    Estimate Hurst exponent using rescaled range (R/S) for one-dimensional series.
-    Returns H (float). Works for series length >= 20 (otherwise returns nan).
-    """
     x = np.array(ts, dtype=float)
     N = len(x)
     if N < 20:
         return np.nan
-    # Remove mean
     x = x - np.mean(x)
-    # cumulative deviate series
     Y = np.cumsum(x)
     R = np.zeros(N)
     S = np.zeros(N)
@@ -230,42 +214,37 @@ def hurst_rs(ts):
         return np.nan
     rs = R[valid] / S[valid]
     ns = np.arange(1, N + 1)[valid]
-    # linear fit in log-log
     try:
         H = np.polyfit(np.log(ns), np.log(rs), 1)[0]
     except Exception:
         H = np.nan
     return float(H)
 
-# --- Utility: curvature/radius statistics for a parametric curve (x(t), y(t)) ---
-def curvature_radius_stats(x, y, t):
-    """
-    Compute curvature-based radius statistics for parametric curve defined by (x, y) sampled at times t.
-    Returns dict with mean, median, std and array of radius values.
-    """
-    # Numerical derivatives
+# --- Utility: robust curvature/radius statistics for a parametric curve (x(t), y(t)) ---
+def curvature_radius_stats(x, y, t, max_radius=1e6, clip_inf=True):
     x_t = np.gradient(x, t)
     y_t = np.gradient(y, t)
     x_tt = np.gradient(x_t, t)
     y_tt = np.gradient(y_t, t)
     denom = (x_t ** 2 + y_t ** 2) ** 1.5
-    # avoid division by zero
-    small = (denom <= 0) | ~np.isfinite(denom)
-    kappa = np.empty_like(denom)
-    # curvature numerator
     num = np.abs(x_t * y_tt - y_t * x_tt)
-    kappa[~small] = num[~small] / denom[~small]
-    kappa[small] = np.nan
-    # radius = 1/|kappa|
     with np.errstate(divide='ignore', invalid='ignore'):
-        radius = 1.0 / kappa
-    # filter huge / negative / nonsensical values
-    radius = np.where(np.isfinite(radius) & (radius > 0), radius, np.nan)
+        kappa = np.where(denom > 0, num / denom, np.nan)
+    radius = np.where(np.isfinite(kappa) & (kappa != 0), 1.0 / kappa, np.nan)
+    if clip_inf:
+        radius = np.where(radius > max_radius, np.nan, radius)
+    finite = np.isfinite(radius)
     stats = {
+        "count_total": len(radius),
+        "count_finite": int(np.sum(finite)),
+        "frac_finite": float(np.sum(finite) / len(radius)),
         "mean": float(np.nanmean(radius)) if np.isfinite(np.nanmean(radius)) else np.nan,
         "median": float(np.nanmedian(radius)) if np.isfinite(np.nanmedian(radius)) else np.nan,
+        "p10": float(np.nanpercentile(radius, 10)) if np.isfinite(np.nanpercentile(radius, 10)) else np.nan,
+        "p90": float(np.nanpercentile(radius, 90)) if np.isfinite(np.nanpercentile(radius, 90)) else np.nan,
         "std": float(np.nanstd(radius)) if np.isfinite(np.nanstd(radius)) else np.nan,
-        "radius_array": radius
+        "radius_array": radius,
+        "kappa_array": (1.0 / radius)  # may contain inf/nan for radius==0
     }
     return stats
 
@@ -285,7 +264,8 @@ for idx, (x0, y0) in enumerate(initial_conditions):
     solutions.append((x, y))
 
     amp = float(np.max(np.sqrt(x * x + y * y)) - np.min(np.sqrt(x * x + y * y)))
-    ftle, final_d = np.nan, np.nan
+
+    ftle, final_d, ftle_r2 = np.nan, np.nan, np.nan
     if compute_metrics:
         eps = 1e-6 * (1.0 + abs(x0) + abs(y0))
         xp0, yp0 = x0 + eps, y0 + 0.5 * eps
@@ -298,10 +278,17 @@ for idx, (x0, y0) in enumerate(initial_conditions):
                 final_d = float(dist[-1])
                 s_idx, e_idx = int(0.25 * len(t_eval)), int(0.75 * len(t_eval))
                 if e_idx > s_idx + 1:
-                    ln_d = np.log(dist[s_idx:e_idx])
+                    d_slice = dist[s_idx:e_idx]
                     t_slice = t_eval[s_idx:e_idx]
-                    if np.isfinite(ln_d).all():
-                        ftle = float(np.polyfit(t_slice, ln_d, 1)[0])
+                    d_slice = np.clip(d_slice, 1e-12, None)
+                    ln_d = np.log(d_slice)
+                    # linear fit and r2 diagnostics
+                    slope, intercept = np.polyfit(t_slice, ln_d, 1)
+                    ftle = float(slope)
+                    resid = ln_d - (slope * t_slice + intercept)
+                    ss_res = np.sum(resid ** 2)
+                    ss_tot = np.sum((ln_d - np.mean(ln_d)) ** 2)
+                    ftle_r2 = 1 - ss_res / ss_tot if ss_tot > 0 else np.nan
         except Exception:
             pass
 
@@ -316,20 +303,42 @@ for idx, (x0, y0) in enumerate(initial_conditions):
     curv_median = cr_stats["median"]
     curv_std = cr_stats["std"]
 
+    # path length
+    dx = np.diff(x)
+    dy = np.diff(y)
+    seg_lengths = np.sqrt(dx * dx + dy * dy)
+    path_len = float(np.sum(seg_lengths))
+
+    # maximum curvature (kappa) and fraction of high curvature points
+    kappa_arr = cr_stats.get("kappa_array")
+    # kappa_array may include inf/nan; handle robustly
+    kappa_vals = np.array(kappa_arr)
+    kappa_vals = kappa_vals[np.isfinite(kappa_vals)] if kappa_vals is not None else np.array([])
+    max_kappa = float(np.nanmax(kappa_vals)) if kappa_vals.size > 0 else np.nan
+    # fraction of points with radius < 10 -> kappa > 0.1 (example threshold)
+    frac_high_curv = float(np.sum(kappa_vals > 0.1) / len(t_eval)) if kappa_vals.size > 0 else np.nan
+
     metrics.append({
         "idx": idx,
         "ftle": ftle,
+        "ftle_r2": ftle_r2,
         "amp": amp,
         "final_dist": final_d,
         "hurst": hurst_val,
         "curv_radius_mean": curv_mean,
         "curv_radius_median": curv_median,
         "curv_radius_std": curv_std,
+        "curv_p10": cr_stats["p10"],
+        "curv_p90": cr_stats["p90"],
+        "curv_count_finite": cr_stats["count_finite"],
         "initial_x": float(x0),
         "initial_y": float(y0),
+        "path_len": path_len,
+        "max_kappa": max_kappa,
+        "frac_high_curv": frac_high_curv,
     })
 
-# Compute local z-score of curvature mean versus nearest neighbours
+# Compute local z-score of curvature median versus nearest neighbours (fallback without sklearn available)
 try:
     from sklearn.neighbors import NearestNeighbors
     use_sklearn = True
@@ -338,7 +347,7 @@ except Exception:
 
 if metrics:
     arr_init = np.array([[m["initial_x"], m["initial_y"]] for m in metrics])
-    rad_means = np.array([m["curv_radius_mean"] for m in metrics])
+    rad_meds = np.array([m["curv_radius_median"] for m in metrics])
     local_z = np.full(len(metrics), np.nan)
     if len(metrics) > 1:
         nbrs_k = min(5, len(metrics) - 1)
@@ -347,54 +356,71 @@ if metrics:
             distances, indices = nbrs.kneighbors(arr_init)
             for i in range(len(metrics)):
                 neigh_idx = indices[i, 1:]
-                neigh_vals = rad_means[neigh_idx]
+                neigh_vals = rad_meds[neigh_idx]
                 neigh_vals = neigh_vals[np.isfinite(neigh_vals)]
-                if not np.isfinite(rad_means[i]) or len(neigh_vals) < 1:
+                if not np.isfinite(rad_meds[i]) or len(neigh_vals) < 1:
                     local_z[i] = np.nan
                 else:
                     mu = np.mean(neigh_vals)
                     sigma = np.std(neigh_vals)
-                    if sigma == 0:
-                        local_z[i] = np.nan
-                    else:
-                        local_z[i] = (rad_means[i] - mu) / sigma
+                    local_z[i] = (rad_meds[i] - mu) / sigma if sigma != 0 else np.nan
         else:
-            # fallback: O(n^2) nearest neighbours search without sklearn
             for i in range(len(metrics)):
                 dists = np.linalg.norm(arr_init - arr_init[i : i + 1], axis=1)
                 order = np.argsort(dists)
-                # skip self
                 neigh_idx = order[1 : 1 + nbrs_k]
-                neigh_vals = rad_means[neigh_idx]
+                neigh_vals = rad_meds[neigh_idx]
                 neigh_vals = neigh_vals[np.isfinite(neigh_vals)]
-                if not np.isfinite(rad_means[i]) or len(neigh_vals) < 1:
+                if not np.isfinite(rad_meds[i]) or len(neigh_vals) < 1:
                     local_z[i] = np.nan
                 else:
                     mu = np.mean(neigh_vals)
                     sigma = np.std(neigh_vals)
-                    if sigma == 0:
-                        local_z[i] = np.nan
-                    else:
-                        local_z[i] = (rad_means[i] - mu) / sigma
+                    local_z[i] = (rad_meds[i] - mu) / sigma if sigma != 0 else np.nan
     for i in range(len(metrics)):
         metrics[i]["curv_radius_local_zscore"] = float(local_z[i]) if np.isfinite(local_z[i]) else np.nan
 
 # Build dataframe
 df_metrics = pd.DataFrame(metrics)
 
-# --- Selection UI (checkbox list, sorted by FTLE descending) ---
-selected_idx = []
-st.sidebar.markdown("**Select trajectories to display (sorted by FTLE)**")
+# --- Compute anomaly score (combine multiple indicators) ---
+# Prepare columns for scoring: ftle (higher), path_len (higher), max_kappa (higher), ftle_r2 (higher means reliable)
+# We'll compute robust z-scores (subtract median, divide by IQR) to avoid influence of outliers
+
+def robust_z(arr):
+    arr = np.array(arr, dtype=float)
+    finite = np.isfinite(arr)
+    out = np.full_like(arr, np.nan)
+    if np.sum(finite) == 0:
+        return out
+    median = np.nanmedian(arr[finite])
+    q1 = np.nanpercentile(arr[finite], 25)
+    q3 = np.nanpercentile(arr[finite], 75)
+    iqr = q3 - q1 if q3 - q1 != 0 else 1.0
+    out[finite] = (arr[finite] - median) / iqr
+    return out
 
 if not df_metrics.empty:
-    df_sorted = df_metrics.sort_values(by="ftle", ascending=False, na_position="last")
-    # ensure enabled indices are valid
+    ftle_z = robust_z(df_metrics['ftle'].values)
+    path_z = robust_z(df_metrics['path_len'].values)
+    kappa_z = robust_z(df_metrics['max_kappa'].values)
+    r2_z = robust_z(df_metrics['ftle_r2'].fillna(0).values)
+    # score = ftle_z + path_z + kappa_z - r2_z (penalize low r2 by subtracting its z)
+    score_arr = ftle_z + path_z + kappa_z - r2_z
+    df_metrics['anomaly_score'] = score_arr
+
+# --- Selection UI (checkbox list, sorted by anomaly_score desc) ---
+selected_idx = []
+st.sidebar.markdown("**Select trajectories to display (sorted by anomaly score)**")
+
+if not df_metrics.empty:
+    df_sorted = df_metrics.sort_values(by="anomaly_score", ascending=False, na_position="last")
     enabled_raw = st.session_state.get("enabled_checkboxes", [])
     st.session_state.enabled_checkboxes = [i for i in enabled_raw if 0 <= i < len(solutions)]
     enabled_set = set(st.session_state.get("enabled_checkboxes", []))
     new_enabled = []
     for m, row in df_sorted.iterrows():
-        label = f"{int(row['idx'])}: FTLE={row['ftle']:.4g}, amp={row['amp']:.4g}, H={row['hurst']:.4g}"
+        label = f"{int(row['idx'])}: score={row.get('anomaly_score', np.nan):.3g}, FTLE={row.get('ftle', np.nan):.3g}"
         default_val = (row["idx"] in enabled_set) if enabled_set else True
         if st.sidebar.checkbox(label, value=default_val, key=f"sel_{int(row['idx'])}"):
             selected_idx.append(int(row['idx']))
@@ -419,17 +445,23 @@ ax.set_ylabel("y(t)")
 ax.grid(True)
 st.pyplot(fig)
 
-# --- Show metrics table (without redundant index) ---
-st.markdown("**Per-trajectory metrics (FTLE estimate, amplitude, final distance, Hurst, curvature stats)**")
-st.dataframe(df_metrics.reset_index(drop=True))
+# --- Show metrics table (rounded) ---
+st.markdown("**Per-trajectory metrics (rounded to 3 decimals)**")
+st.dataframe(df_metrics.reset_index(drop=True).round(3))
+
+# CSV export with rounding
+if not df_metrics.empty:
+    csv_name = "export_metrics_rounded.csv"
+    df_metrics.to_csv(csv_name, index=False, float_format="%.3f")
+    st.download_button("Download metrics CSV (rounded)", data=open(csv_name, 'rb'), file_name=csv_name)
 
 st.markdown("**Parameters currently used:**")
 st.text(parameters_to_text(collect_params_from_widgets()))
 
 st.markdown("---")
 st.markdown("- Each curve is annotated with its `idx` at the final point.")
-st.markdown("- Table shows metrics without redundant pandas index.")
-st.markdown("- Checkbox list sorted by FTLE descending, saves only enabled indices.")
+st.markdown("- Table shows robust curvature statistics (median, p10, p90) and path length.")
+st.markdown("- FTLE diagnostics include R^2 of ln(dist) fit (ftle_r2). Anomaly score combines FTLE, path length, max curvature and R^2 reliability.")
 
 st.markdown("---")
 st.markdown("**System of ODEs (safe):**")
