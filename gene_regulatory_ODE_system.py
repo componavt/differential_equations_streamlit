@@ -5,6 +5,7 @@ from scipy.integrate import solve_ivp
 import pandas as pd
 
 from plain_text_parameters import parameters_to_text, text_to_parameters
+from utils.system_of_odes_latex import print_system_of_odes
 
 # --------------------------------------------------
 # gene_regulatory_ODE_system
@@ -431,11 +432,4 @@ st.markdown("- Each curve is annotated with its `idx` at the final point.")
 st.markdown("- Table shows metrics without redundant pandas index.")
 st.markdown("- Checkbox list sorted by FTLE descending, saves only enabled indices.")
 
-st.markdown("---")
-st.markdown("**System of ODEs (safe):**")
-st.latex(r"""
-\begin{cases}
-\frac{dx}{dt} = \frac{K\,x^{1/\alpha}}{b^{1/\alpha} + x^{1/\alpha}} - \gamma_1\,x,\\[6pt]
-\frac{dy}{dt} = \frac{K\,y^{1/\alpha}}{b^{1/\alpha} + y^{1/\alpha}} - \gamma_2\,y.
-\end{cases}
-""")
+print_system_of_odes()
