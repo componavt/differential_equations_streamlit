@@ -2,7 +2,7 @@ import streamlit as st
 
 def print_system_of_odes():
     st.markdown("---")
-    st.markdown("**System of ODEs (safe):**")
+    st.markdown("**System of ODEs (safe new):**")
   
     st.latex(r"""
     \begin{cases}
