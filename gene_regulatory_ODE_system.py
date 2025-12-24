@@ -466,7 +466,7 @@ st.markdown("**Parameters currently used:**")
 st.text(parameters_to_text(collect_params_from_widgets()))
 
 # Import the documentation function
-from documentation import display_ode_documentation
+from utils.documentation import display_ode_documentation
 
 # Display the ODE system documentation
 display_ode_documentation()
