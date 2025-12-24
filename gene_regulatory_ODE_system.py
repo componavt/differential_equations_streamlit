@@ -5,6 +5,7 @@ from scipy.integrate import solve_ivp
 import pandas as pd
 
 from utils.plain_text_parameters import parameters_to_text, text_to_parameters
+from utils.compute_metrics import compute_ftle_metrics
 
 # --------------------------------------------------
 # gene_regulatory_ODE_system (patched v2)
@@ -144,9 +145,6 @@ col_apply, col_read = st.sidebar.columns(2)
 col_apply.button("Apply text → sliders", on_click=apply_text_to_sliders)
 col_read.button("Read sliders → text", on_click=read_sliders_to_text)
 
-# --- Compute per-trajectory metrics (optional) ---
-compute_metrics = st.sidebar.checkbox("Compute per-trajectory metrics (FTLE, amplitude, Hurst, curvature, path)", value=False)
-
 # --- Build angle array ---
 cs_val, ce_val = circle_start_end
 span = (ce_val - cs_val) % 360
@@ -272,32 +270,7 @@ for idx, (x0, y0) in enumerate(initial_conditions):
 
     amp = float(np.max(np.sqrt(x * x + y * y)) - np.min(np.sqrt(x * x + y * y)))
 
-    ftle, final_d, ftle_r2 = np.nan, np.nan, np.nan
-    if compute_metrics:
-        eps = 1e-6 * (1.0 + abs(x0) + abs(y0))
-        xp0, yp0 = x0 + eps, y0 + 0.5 * eps
-        try:
-            sol_p = solve_ivp(rhs, (0, te), (xp0, yp0), method='DOP853', t_eval=t_eval)
-            if sol_p.success:
-                xp, yp = sol_p.y
-                dist = np.sqrt((x - xp) ** 2 + (y - yp) ** 2)
-                dist = np.where(dist <= 0, 1e-12, dist)
-                final_d = float(dist[-1])
-                s_idx, e_idx = int(0.25 * len(t_eval)), int(0.75 * len(t_eval))
-                if e_idx > s_idx + 1:
-                    d_slice = dist[s_idx:e_idx]
-                    t_slice = t_eval[s_idx:e_idx]
-                    d_slice = np.clip(d_slice, 1e-12, None)
-                    ln_d = np.log(d_slice)
-                    # linear fit and r2 diagnostics
-                    slope, intercept = np.polyfit(t_slice, ln_d, 1)
-                    ftle = float(slope)
-                    resid = ln_d - (slope * t_slice + intercept)
-                    ss_res = np.sum(resid ** 2)
-                    ss_tot = np.sum((ln_d - np.mean(ln_d)) ** 2)
-                    ftle_r2 = 1 - ss_res / ss_tot if ss_tot > 0 else np.nan
-        except Exception:
-            pass
+    ftle, final_d, ftle_r2 = compute_ftle_metrics(rhs, x0, y0, te, t_eval, x, y)
 
     # Hurst: compute for x and y and take mean
     hx = hurst_rs(x)
