@@ -5,8 +5,8 @@ import numpy as np
 def highlight_extreme_values_in_table(df):
     """
         Applies conditional formatting to highlight extreme values in metrics DataFrame.
-        Highlights top 2 values in yellow for columns where high values are significant,
-        and top 2 minimum values in light blue for columns where low values are significant.
+        Highlights top 2 values in maroon for columns where high values are significant,
+        and top 2 minimum values in navy for columns where low values are significant.
         """
     # Create a copy of the DataFrame with styling
     styles = pd.DataFrame('', index=df.index, columns=df.columns)
@@ -30,10 +30,10 @@ def highlight_extreme_values_in_table(df):
                 valid_values = df[col].dropna()
                 if len(valid_values) >= 2:
                     top2_values = valid_values.nlargest(2)
-                    styles.loc[valid_values.isin(top2_values), col] = 'background-color: yellow'
+                    styles.loc[valid_values.isin(top2_values), col] = 'background-color: #800000'  # maroon
                 elif len(valid_values) == 1:
                     top1_idx = valid_values.index[0]
-                    styles.loc[top1_idx, col] = 'background-color: yellow'
+                    styles.loc[top1_idx, col] = 'background-color: #800000'  # maroon
         
         elif col in min_columns:
             # Highlight top 2 minimum values in light blue
@@ -42,9 +42,9 @@ def highlight_extreme_values_in_table(df):
                 valid_values = df[col].dropna()
                 if len(valid_values) >= 2:
                     bottom2_values = valid_values.nsmallest(2)
-                    styles.loc[valid_values.isin(bottom2_values), col] = 'background-color: lightblue'
+                    styles.loc[valid_values.isin(bottom2_values), col] = 'background-color: #000080'  # navy
                 elif len(valid_values) == 1:
                     bottom1_idx = valid_values.index[0]
-                    styles.loc[bottom1_idx, col] = 'background-color: lightblue'
+                    styles.loc[bottom1_idx, col] = 'background-color: #000080'  # navy
     
     return styles

@@ -429,13 +429,14 @@ st.pyplot(fig)
 # --- Show metrics table (rounded) ---
 st.markdown("**Per-trajectory metrics (rounded to 3 decimals)**")
 if not df_metrics.empty:
-    styled_df = df_metrics.reset_index(drop=True).round(3).style.apply(highlight_extreme_values_in_table, axis=None)
+    df_to_display = df_metrics.reset_index(drop=True).round(3)
+    styled_df = df_to_display.style.apply(highlight_extreme_values_in_table, axis=None)
     st.dataframe(styled_df)
 
 # CSV export with rounding
 if not df_metrics.empty:
     csv_name = "export_metrics_rounded.csv"
-    df_metrics.to_csv(csv_name, index=False, float_format="%.3f")
+    df_metrics.round(3).to_csv(csv_name, index=False, float_format="%.3f")
     st.download_button("Download metrics CSV (rounded)", data=open(csv_name, 'rb'), file_name=csv_name)
 
 st.markdown("**Parameters currently used:**")
