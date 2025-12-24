@@ -173,6 +173,13 @@ R_val = float(initial_radius)
 tn = int(t_number)
 te = float(t_end)
 
+# --- Create initial conditions from parameters ---
+initial_conditions = []
+for angle in angles:
+    x0 = center_x + R_val * np.cos(angle)
+    y0 = center_y + R_val * np.sin(angle)
+    initial_conditions.append((x0, y0))
+
 def rhs(t, state):
     x, y = state
     n = 1.0 / alpha_val
