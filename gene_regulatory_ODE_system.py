@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 import pandas as pd
 
-from plain_text_parameters import parameters_to_text, text_to_parameters
+from utils.plain_text_parameters import parameters_to_text, text_to_parameters
 
 # --------------------------------------------------
 # gene_regulatory_ODE_system (patched v2)
