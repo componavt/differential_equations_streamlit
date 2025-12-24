@@ -6,6 +6,7 @@ import pandas as pd
 
 from utils.plain_text_parameters import parameters_to_text, text_to_parameters
 from utils.compute_metrics import compute_ftle_metrics
+from utils.highlight_extreme_values_in_table import highlight_extreme_values_in_table
 
 # --------------------------------------------------
 # gene_regulatory_ODE_system (patched v2)
@@ -427,7 +428,9 @@ st.pyplot(fig)
 
 # --- Show metrics table (rounded) ---
 st.markdown("**Per-trajectory metrics (rounded to 3 decimals)**")
-st.dataframe(df_metrics.reset_index(drop=True).round(3))
+if not df_metrics.empty:
+    styled_df = df_metrics.reset_index(drop=True).round(3).style.apply(highlight_extreme_values_in_table, axis=None)
+    st.dataframe(styled_df)
 
 # CSV export with rounding
 if not df_metrics.empty:
