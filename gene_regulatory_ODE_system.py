@@ -429,8 +429,11 @@ st.pyplot(fig)
 # --- Show metrics table (rounded) ---
 st.markdown("**Per-trajectory metrics (rounded to 3 decimals)**")
 if not df_metrics.empty:
-    df_to_display = df_metrics.reset_index(drop=True).round(3)
-    styled_df = df_to_display.style.apply(highlight_extreme_values_in_table, axis=None)
+    df_to_display = df_metrics.reset_index(drop=True)
+    # Format only numeric columns, keeping 'idx' as integer
+    numeric_columns = df_to_display.select_dtypes(include=[np.number]).columns.tolist()
+    formatter = {col: "{:.3f}" for col in numeric_columns}
+    styled_df = df_to_display.style.format(formatter).apply(highlight_extreme_values_in_table, axis=None)
     st.dataframe(styled_df)
 
 # CSV export with rounding
