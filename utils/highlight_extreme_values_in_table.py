@@ -7,7 +7,7 @@ def highlight_extreme_values_in_table(df):
         Applies conditional formatting to highlight extreme values in metrics DataFrame.
         Highlights top 2 values in chocolate color for columns where high values are significant,
         and top 2 minimum values in darkturquoise color for columns where low values are significant.
-        Works with both original and shortened column names.
+        Works with both original and shortened column names (e.g., curv_radius_mean → curv_rad_mn).
         """
     # Create a copy of the DataFrame with styling
     styles = pd.DataFrame('', index=df.index, columns=df.columns)

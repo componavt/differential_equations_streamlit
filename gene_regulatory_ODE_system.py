@@ -7,6 +7,7 @@ import pandas as pd
 from utils.plain_text_parameters import parameters_to_text, text_to_parameters
 from utils.compute_metrics import compute_ftle_metrics
 from utils.highlight_extreme_values_in_table import highlight_extreme_values_in_table
+from utils.neural_ode_solver import train_neural_ode, predict_with_neural_ode
 import streamlit.components.v1 as components
 
 # --------------------------------------------------
@@ -18,6 +19,8 @@ import streamlit.components.v1 as components
 # - Added additional metrics: max_kappa, frac_high_curv, curv p10/p90, curv finite count
 # - Anomaly score computed (combines FTLE, path_len, max_kappa, penalizes low R^2)
 # - Display and CSV export rounded to 3 decimal places
+# - Dual solver: DOP853 for full interval, NN for extrapolation
+# - t_train_end and t_full_end parameters added
 # --------------------------------------------------
 
 # Default parameter values
@@ -30,7 +33,8 @@ DEFAULTS = {
     "initial_radius": 0.01,
     "num_points": 12,
     "t_number": 100,
-    "t_end": 1.0,
+    "t_train_end": 1.0,
+    "t_full_end": 3.0,
     "circle_start_end": (0, 360),
 }
 
@@ -40,10 +44,9 @@ st.sidebar.header("Simulation Settings")
 # Time / solver resolution
 t_number = st.sidebar.slider("t_number", min_value=10, max_value=1000, step=10,
                              value=int(DEFAULTS["t_number"]))
+t_train_end = st.sidebar.slider("Training interval end (t_train_end)", 0.1, 5.0, float(DEFAULTS["t_train_end"]), 0.1)
+t_full_end = st.sidebar.slider("Full integration end (t_full_end)", t_train_end + 0.1, 10.0, float(DEFAULTS["t_full_end"]), 0.1)
 
-t_end_vals = list(np.round(np.arange(0, 1.01, 0.1), 2)) + list(np.round(np.arange(1.5, 5.1, 0.5), 2))
-t_end = st.sidebar.select_slider("End time t_end", options=t_end_vals,
-                                  value=float(DEFAULTS["t_end"]))
 
 alpha = st.sidebar.number_input("alpha (1/alpha exponent)", min_value=1e-9, max_value=10.0,
                                 value=float(DEFAULTS["alpha"]), format="%g")
@@ -75,7 +78,8 @@ def collect_params_from_widgets():
     cs, ce = circle_start_end
     params = {
         "t_number": int(t_number),
-        "t_end": float(t_end),
+        "t_train_end": float(t_train_end),
+        "t_full_end": float(t_full_end),
         "alpha": float(alpha),
         "K": float(K),
         "b": float(b),
@@ -106,9 +110,8 @@ def apply_text_to_sliders():
     parsed = text_to_parameters(st.session_state.params_text)
     if not parsed:
         return
-
     int_keys = {"t_number", "num_points", "circle_start", "circle_end"}
-    float_keys = {"t_end", "alpha", "K", "b", "gamma1", "gamma2", "initial_radius", "center_x", "center_y"}
+    float_keys = {"t_train_end", "t_full_end", "alpha", "K", "b", "gamma1", "gamma2", "initial_radius", "center_x", "center_y"}
 
     for key, val in parsed.items():
         if key in int_keys:
@@ -171,7 +174,8 @@ g2_val = float(gamma2)
 R_val = float(initial_radius)
 
 tn = int(t_number)
-te = float(t_end)
+tte = float(t_train_end)
+tfe = float(t_full_end)
 
 # --- Create initial conditions from parameters ---
 initial_conditions = []
@@ -254,40 +258,64 @@ def curvature_radius_stats(x, y, t, max_radius=1e6, clip_inf=True):
         "kappa_array": (1.0 / radius)  # may contain inf/nan for radius==0
     }
     return stats
-
 solutions, metrics = [], []
-t_eval = np.linspace(0, te, tn)
 
-# iterate initial conditions and compute solutions & metrics
+# Main loop: solve for each initial condition
 for idx, (x0, y0) in enumerate(initial_conditions):
+    # Solve ODE on full interval [0, t_full_end] using DOP853
+    t_eval_full = np.linspace(0, tfe, tn)
     try:
-        sol = solve_ivp(rhs, (0, te), (x0, y0), method='DOP853', t_eval=t_eval)
+        sol = solve_ivp(rhs, (0, tfe), (x0, y0), method='DOP853', t_eval=t_eval_full)
         if not sol.success:
             continue
-        x, y = sol.y
+        x_full, y_full = sol.y
     except Exception:
         continue
 
-    solutions.append((x, y))
+    # Get solution on training interval [0, t_train_end] for neural network training
+    t_eval_train = np.linspace(0, tte, max(50, tn//2))  # Use fewer points for training
+    try:
+        sol_train = solve_ivp(rhs, (0, tte), (x0, y0), method='DOP853', t_eval=t_eval_train)
+        if not sol_train.success:
+            continue
+        x_train, y_train = sol_train.y
+    except Exception:
+        continue
 
-    amp = float(np.max(np.sqrt(x * x + y * y)) - np.min(np.sqrt(x * x + y * y)))
+    # Train neural network on [0, t_train_end]
+    nn_model = train_neural_ode(t_eval_train, x_train, y_train, epochs=100)
 
-    ftle, final_d, ftle_r2 = compute_ftle_metrics(rhs, x0, y0, te, t_eval, x, y)
+    # Get neural network predictions on full interval
+    x_nn_full, y_nn_full = predict_with_neural_ode(nn_model, t_eval_full)
+
+    # Store solutions for plotting
+    solutions.append({
+        "dop853_x": x_full,
+        "dop853_y": y_full,
+        "nn_x": x_nn_full,
+        "nn_y": y_nn_full,
+        "t_full": t_eval_full
+    })
+
+    # Calculate metrics using the DOP853 solution on the full interval
+    amp = float(np.max(np.sqrt(x_full * x_full + y_full * y_full)) - np.min(np.sqrt(x_full * x_full + y_full * y_full)))
+
+    ftle, final_d, ftle_r2 = compute_ftle_metrics(rhs, x0, y0, tfe, t_eval_full, x_full, y_full)
 
     # Hurst: compute for x and y and take mean
-    hx = hurst_rs(x)
-    hy = hurst_rs(y)
+    hx = hurst_rs(x_full)
+    hy = hurst_rs(y_full)
     hurst_val = np.nanmean([hx, hy])
 
     # curvature radius stats
-    cr_stats = curvature_radius_stats(x, y, t_eval)
+    cr_stats = curvature_radius_stats(x_full, y_full, t_eval_full)
     curv_mean = cr_stats["mean"]
     curv_median = cr_stats["median"]
     curv_std = cr_stats["std"]
 
     # path length
-    dx = np.diff(x)
-    dy = np.diff(y)
+    dx = np.diff(x_full)
+    dy = np.diff(y_full)
     seg_lengths = np.sqrt(dx * dx + dy * dy)
     path_len = float(np.sum(seg_lengths))
 
@@ -298,7 +326,7 @@ for idx, (x0, y0) in enumerate(initial_conditions):
     kappa_vals = kappa_vals[np.isfinite(kappa_vals)] if kappa_vals is not None else np.array([])
     max_kappa = float(np.nanmax(kappa_vals)) if kappa_vals.size > 0 else np.nan
     # fraction of points with radius < 10 -> kappa > 0.1 (example threshold)
-    frac_high_curv = float(np.sum(kappa_vals > 0.1) / len(t_eval)) if kappa_vals.size > 0 else np.nan
+    frac_high_curv = float(np.sum(kappa_vals > 0.1) / len(t_eval_full)) if kappa_vals.size > 0 else np.nan
 
     metrics.append({
         "idx": idx,
@@ -319,6 +347,7 @@ for idx, (x0, y0) in enumerate(initial_conditions):
         "max_kappa": max_kappa,
         "frac_high_curv": frac_high_curv,
     })
+
 
 # Compute local z-score of curvature median versus nearest neighbours (fallback without sklearn available)
 try:
@@ -408,24 +437,52 @@ if not df_metrics.empty:
             selected_idx.append(int(row['idx']))
             new_enabled.append(int(row['idx']))
     st.session_state.enabled_checkboxes = new_enabled
-
 # --- Plot trajectories ---
 fig, ax = plt.subplots(figsize=(8, 6))
 styles, colors = ['-', '--', '-.', ':'], plt.cm.tab20.colors
-for m, (x, y) in enumerate(solutions):
+
+for m, solution_data in enumerate(solutions):
     if m not in selected_idx:
         continue
     style, color = styles[m % len(styles)], colors[m % len(colors)]
-    ax.plot(x, y, linestyle=style, color=color, linewidth=1.2)
-    ax.plot(x[0], y[0], 'o', color=color, markersize=4)
-    ax.plot(x[-1], y[-1], 'x', color=color, markersize=6)
-    ax.text(x[-1] + 0.01, y[-1] + 0.01, f"{m}", fontsize=8, color=color)
+    
+    # Plot DOP853 solution
+    x_dop = solution_data["dop853_x"]
+    y_dop = solution_data["dop853_y"]
+    ax.plot(x_dop, y_dop, linestyle=style, color=color, linewidth=1.2, label=f'DOP853 traj {m}' if m == selected_idx[0] else "")
+    
+    # Plot Neural Network solution on extrapolation interval
+    if solution_data["nn_x"] is not None and solution_data["nn_y"] is not None:
+        x_nn = solution_data["nn_x"]
+        y_nn = solution_data["nn_y"]
+        t_full = solution_data["t_full"]
+        
+        # Find the index corresponding to t_train_end to separate training and extrapolation regions
+        train_idx = np.searchsorted(t_full, tte)
+        
+        # Plot training part (should overlap with DOP853)
+        ax.plot(x_nn[:train_idx], y_nn[:train_idx], linestyle='--', color=color, linewidth=1.0, alpha=0.7)
+        
+        # Plot extrapolation part (where differences appear)
+        ax.plot(x_nn[train_idx:], y_nn[train_idx:], linestyle='--', color=color, linewidth=1.2, label=f'NN traj {m}' if m == selected_idx[0] else "")
+    
+    # Mark initial and final points
+    ax.plot(x_dop[0], y_dop[0], 'o', color=color, markersize=4)
+    ax.plot(x_dop[-1], y_dop[-1], 'x', color=color, markersize=6)
+    ax.text(x_dop[-1] + 0.01, y_dop[-1] + 0.01, f"{m}", fontsize=8, color=color)
 
-ax.set_title(f"Gene regulatory trajectories — t_end={te}, t_points={tn}")
+# Add vertical line to indicate the transition from training to extrapolation
+ax.axvline(x=x_dop[np.searchsorted(t_full, tte)], color='gray', linestyle=':', label='t_train_end', alpha=0.5)
+
+ax.set_title(f"Gene regulatory trajectories — t_train_end={tte}, t_full_end={tfe}, t_points={tn}")
 ax.set_xlabel("x(t)")
 ax.set_ylabel("y(t)")
 ax.grid(True)
+ax.legend()
 st.pyplot(fig)
+
+# --- Show info about dual solvers ---
+st.info(f"DOP853 solved on full interval [0, {tfe:.2f}], NN trained on [0, {tte:.2f}] and extrapolated to [{tte:.2f}, {tfe:.2f}]")
 
 # --- Show metrics table (rounded) ---
 st.markdown("**Per-trajectory metrics (rounded to 3 decimals)**")
