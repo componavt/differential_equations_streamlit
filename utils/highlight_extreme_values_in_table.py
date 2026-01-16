@@ -30,11 +30,11 @@ def highlight_extreme_values_in_table(df):
                 valid_values = df[col].dropna()
                 if len(valid_values) >= 2:
                     top2_values = valid_values.nlargest(2)
-                    styles.loc[valid_values.isin(top2_values), col] = 'background-color: #800000'  # maroon
+                    styles.loc[valid_values.isin(top2_values), col] = 'background-color: #D2691E'  # chocolate
                 elif len(valid_values) == 1:
                     top1_idx = valid_values.index[0]
-                    styles.loc[top1_idx, col] = 'background-color: #800000'  # maroon
-        
+                    styles.loc[top1_idx, col] = 'background-color: #D2691E'  # chocolate
+         
         elif col in min_columns:
             # Highlight top 2 minimum values in light blue
             if df[col].dtype in ['float64', 'int64', 'float32', 'int32'] and not df[col].isna().all():
@@ -42,9 +42,9 @@ def highlight_extreme_values_in_table(df):
                 valid_values = df[col].dropna()
                 if len(valid_values) >= 2:
                     bottom2_values = valid_values.nsmallest(2)
-                    styles.loc[valid_values.isin(bottom2_values), col] = 'background-color: #000080'  # navy
+                    styles.loc[valid_values.isin(bottom2_values), col] = 'background-color: #00CED1'  # darkturquoise
                 elif len(valid_values) == 1:
                     bottom1_idx = valid_values.index[0]
-                    styles.loc[bottom1_idx, col] = 'background-color: #000080'  # navy
+                    styles.loc[bottom1_idx, col] = 'background-color: #00CED1'  # darkturquoise
     
     return styles
