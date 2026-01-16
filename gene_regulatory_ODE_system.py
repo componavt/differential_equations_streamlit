@@ -7,6 +7,7 @@ import pandas as pd
 from utils.plain_text_parameters import parameters_to_text, text_to_parameters
 from utils.compute_metrics import compute_ftle_metrics
 from utils.highlight_extreme_values_in_table import highlight_extreme_values_in_table
+import streamlit.components.v1 as components
 
 # --------------------------------------------------
 # gene_regulatory_ODE_system (patched v2)
@@ -431,20 +432,28 @@ st.markdown("**Per-trajectory metrics (rounded to 3 decimals)**")
 if not df_metrics.empty:
     df_to_display = df_metrics.reset_index(drop=True)
     
-    # Modify column names that start with 'curv_' to include line breaks for better display (except for short ones)
-    df_to_display = df_to_display.rename(columns={
-        'curv_radius_mean': 'curv_\nradius_\nmean',
-        'curv_radius_median': 'curv_\nradius_\nmedian',
-        'curv_radius_std': 'curv_\nradius_\nstd',
-        'curv_radius_local_zscore': 'curv_\nradius_\nlocal_\nzscore',
-        'curv_count_finite': 'curv_\ncount_\nfinite'
-        # curv_p10 and curv_p90 remain unchanged as they are short enough
-    })
+    # Create a copy of the dataframe with shorter column names for display purposes
+    df_display_shortened = df_to_display.copy()
+    
+    # Define mapping for shortened column names (only for long 'curv_' columns)
+    column_rename_map = {
+        'curv_radius_mean': 'curv_rad_mn',
+        'curv_radius_median': 'curv_rad_med',
+        'curv_radius_std': 'curv_rad_std',
+        'curv_radius_local_zscore': 'curv_rad_lcl_z',
+        'curv_count_finite': 'curv_ct_fin'
+        # Note: curv_p10 and curv_p90 are already short
+    }
+    
+    df_display_shortened = df_display_shortened.rename(columns=column_rename_map)
     
     # Format only numeric columns, keeping 'idx' as integer
-    numeric_columns = df_to_display.select_dtypes(include=[np.number]).columns.tolist()
+    numeric_columns = df_display_shortened.select_dtypes(include=[np.number]).columns.tolist()
     formatter = {col: "{:.3f}" for col in numeric_columns}
-    styled_df = df_to_display.style.format(formatter).apply(highlight_extreme_values_in_table, axis=None)
+    
+    # Apply styling - note that our highlight function now supports both original and shortened names
+    styled_df = df_display_shortened.style.format(formatter).apply(highlight_extreme_values_in_table, axis=None)
+    
     st.dataframe(styled_df)
 
 # CSV export with rounding

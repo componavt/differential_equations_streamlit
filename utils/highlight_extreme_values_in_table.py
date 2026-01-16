@@ -7,38 +7,41 @@ def highlight_extreme_values_in_table(df):
         Applies conditional formatting to highlight extreme values in metrics DataFrame.
         Highlights top 2 values in chocolate color for columns where high values are significant,
         and top 2 minimum values in darkturquoise color for columns where low values are significant.
-        Works with both original column names and renamed versions (with line breaks).
+        Works with both original and shortened column names.
         """
     # Create a copy of the DataFrame with styling
     styles = pd.DataFrame('', index=df.index, columns=df.columns)
     
-    # Function to map original column names to their renamed versions (only for long names)
-    def get_renamed_col_name(original_name):
-        if original_name in ['curv_p10', 'curv_p90']:
-            # Don't rename short column names
-            return original_name
-        else:
-            # Rename long column names
-            return original_name.replace('curv_', 'curv_\n').replace('_mean', '_\nmean').replace('_median', '_\nmedian').replace('_std', '_\nstd').replace('_local_zscore', '_\nlocal_\nzscore').replace('_count_finite', '_\ncount_\nfinite')
+    # Define possible column names for max values (both original and shortened)
+    max_columns_possible = [
+        ['ftle'], ['ftle_r2'], ['amp'], ['final_dist'], ['hurst'],
+        ['curv_count_finite', 'curv_ct_fin'],  # Both original and shortened
+        ['path_len'], ['max_kappa'], ['frac_high_curv'], ['anomaly_score']
+    ]
     
-    # Define columns where higher values are significant (max values to be highlighted)
-    max_columns_original = ['ftle', 'ftle_r2', 'amp', 'final_dist', 'hurst', 'curv_count_finite',
-                   'path_len', 'max_kappa', 'frac_high_curv', 'anomaly_score']
+    # Define possible column names for min values (both original and shortened)
+    min_columns_possible = [
+        ['curv_radius_mean', 'curv_rad_mn'],  # Both original and shortened
+        ['curv_radius_median', 'curv_rad_med'],  # Both original and shortened
+        ['curv_radius_std', 'curv_rad_std'],  # Both original and shortened
+        ['curv_radius_local_zscore', 'curv_rad_lcl_z'],  # Both original and shortened
+        ['curv_p10'], ['curv_p90']
+    ]
     
-    # Define columns where lower values are significant (min values to be highlighted)
-    min_columns_original = ['curv_radius_mean', 'curv_radius_median', 'curv_radius_std', 'curv_radius_local_zscore',
-                   'curv_p10', 'curv_p90']
-    
-    # Map original names to their possible renamed versions
+    # Identify actual columns in the DataFrame
     max_columns = []
-    for col in df.columns:
-        if col in max_columns_original or col in [get_renamed_col_name(name) for name in max_columns_original]:
-            max_columns.append(col)
+    for col_group in max_columns_possible:
+        for col in col_group:
+            if col in df.columns:
+                max_columns.append(col)
+                break  # Only add the first matching column from the group
     
     min_columns = []
-    for col in df.columns:
-        if col in min_columns_original or col in [get_renamed_col_name(name) for name in min_columns_original]:
-            min_columns.append(col)
+    for col_group in min_columns_possible:
+        for col in col_group:
+            if col in df.columns:
+                min_columns.append(col)
+                break  # Only add the first matching column from the group
     
     for col in df.columns:
         if col == 'idx':  # Skip the index column
