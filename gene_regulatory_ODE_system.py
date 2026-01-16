@@ -430,6 +430,17 @@ st.pyplot(fig)
 st.markdown("**Per-trajectory metrics (rounded to 3 decimals)**")
 if not df_metrics.empty:
     df_to_display = df_metrics.reset_index(drop=True)
+    
+    # Modify column names that start with 'curv_' to include line breaks for better display (except for short ones)
+    df_to_display = df_to_display.rename(columns={
+        'curv_radius_mean': 'curv_\nradius_\nmean',
+        'curv_radius_median': 'curv_\nradius_\nmedian',
+        'curv_radius_std': 'curv_\nradius_\nstd',
+        'curv_radius_local_zscore': 'curv_\nradius_\nlocal_\nzscore',
+        'curv_count_finite': 'curv_\ncount_\nfinite'
+        # curv_p10 and curv_p90 remain unchanged as they are short enough
+    })
+    
     # Format only numeric columns, keeping 'idx' as integer
     numeric_columns = df_to_display.select_dtypes(include=[np.number]).columns.tolist()
     formatter = {col: "{:.3f}" for col in numeric_columns}
