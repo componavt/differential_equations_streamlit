@@ -513,22 +513,42 @@ for m, solution_data in enumerate(solutions):
     ax.plot(x_dop[-1], y_dop[-1], 'x', color=color, markersize=6)
     ax.text(x_dop[-1] + 0.01, y_dop[-1] + 0.01, f"{m}", fontsize=8, color=color)
     
-    # Mark t_train_end point with a triangle
+    # Mark t_train_end point with a triangle for both DOP853 and NN
     train_idx = np.searchsorted(t_full, tte)
     if train_idx < len(x_dop):
         ax.plot(x_dop[train_idx], y_dop[train_idx], '^', color=color, markersize=8, markeredgecolor='black')
+        # Also mark the corresponding point on NN curve
+        if x_nn is not None and y_nn is not None and train_idx < len(x_nn):
+            ax.plot(x_nn[train_idx], y_nn[train_idx], '^', color=color, markersize=8, markeredgecolor='black', markerfacecolor='none')
+            
+            # Always draw line between triangles at t_train_end regardless of show_connections setting
+            ax.plot([x_dop[train_idx], x_nn[train_idx]], [y_dop[train_idx], y_nn[train_idx]],
+                   color=color, linewidth=1.0, alpha=0.7, linestyle=':')
         
         # If showing connections, draw lines between DOP853 and NN points
         if show_connections:
             for i in range(0, len(x_dop), connection_stride):
                 ax.plot([x_dop[i], x_nn[i]], [y_dop[i], y_nn[i]],
                        color=color, linewidth=0.5, alpha=0.3, linestyle='-')
+    
+    # Add trajectory number label near the end point for both curves
+    ax.text(x_dop[-1] + 0.01, y_dop[-1] + 0.01, f"{m}", fontsize=8, color=color)
+    if x_nn is not None and y_nn is not None:
+        ax.text(x_nn[-1] + 0.01, y_nn[-1] + 0.01, f"{m}", fontsize=8, color=color)
 
 ax.set_title(f"Gene regulatory trajectories ({nn_model_type}) — t_train_end={tte}, t_full_end={tfe}, t_points={tn}")
 ax.set_xlabel("x(t)")
 ax.set_ylabel("y(t)")
 ax.grid(True)
-ax.legend()
+# Only show legend if there are few trajectories to avoid clutter
+if len(selected_idx) <= 3:
+    ax.legend()
+else:
+    # Create custom legend with unique labels
+    from matplotlib.lines import Line2D
+    legend_elements = [Line2D([0], [0], color='gray', lw=2, linestyle='-', label='DOP853'),
+                      Line2D([0], [0], color='gray', lw=2, linestyle='--', label='NN')]
+    ax.legend(handles=legend_elements)
 st.pyplot(fig)
 
 # --- Time series plot: x(t) and y(t) ---
@@ -576,11 +596,22 @@ if show_connections:
         
         ax_shad.plot(epsilon_t, t_full, color=color, linewidth=1.2, label=f'ε(t) traj {m}' if m == selected_idx[0] else "")
     
+    # Add vertical line to indicate the transition from training to extrapolation
+    ax_shad.axhline(y=tte, color='red', linestyle='--', alpha=0.7, label=f't_train_end={tte}')
+    
     ax_shad.set_title(f"Shadowing ({nn_model_type}) — ε(t) vs t — t_train_end={tte}, t_full_end={tfe}, t_points={tn}")
     ax_shad.set_xlabel("ε(t)")
     ax_shad.set_ylabel("t")
     ax_shad.grid(True)
-    ax_shad.legend()
+    # Only show legend if there are few trajectories to avoid clutter
+    if len(selected_idx) <= 3:
+        ax_shad.legend()
+    else:
+        # Create custom legend with unique labels
+        from matplotlib.lines import Line2D
+        legend_elements = [Line2D([0], [0], color='gray', lw=2, linestyle='-', label='ε(t)'),
+                          Line2D([0], [0], color='red', lw=1, linestyle='--', label=f'train/extrap boundary')]
+        ax_shad.legend(handles=legend_elements)
     st.pyplot(fig_shad)
 
 # --- Show info about solvers ---
