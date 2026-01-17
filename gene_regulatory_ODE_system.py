@@ -536,7 +536,7 @@ for m, solution_data in enumerate(solutions):
     if x_nn is not None and y_nn is not None:
         ax.text(x_nn[-1] + 0.01, y_nn[-1] + 0.01, f"{m}", fontsize=8, color=color)
 
-ax.set_title(f"Gene regulatory trajectories ({nn_model_type}) — t_train_end={tte}, t_full_end={tfe}, t_points={tn}")
+ax.set_title(f"Gene regulatory trajectories ({nn_model_type}) — t_train_end={tte:.2f}, t_full_end={tfe:.2f}, t_points={tn}")
 ax.set_xlabel("x(t)")
 ax.set_ylabel("y(t)")
 ax.grid(True)
@@ -567,7 +567,7 @@ for m, solution_data in enumerate(solutions):
     ax_ts.plot(t_full, x_dop, linestyle='-', color=color, linewidth=1.2, label=f'x(t) traj {m}' if m == selected_idx[0] else "")
     ax_ts.plot(t_full, y_dop, linestyle='--', color=color, linewidth=1.2, label=f'y(t) traj {m}' if m == selected_idx[0] else "")
 
-ax_ts.set_title(f"Time series ({nn_model_type}) — x(t) and y(t) — t_train_end={tte}, t_full_end={tfe}, t_points={tn}")
+ax_ts.set_title(f"Time series ({nn_model_type}) — x(t) and y(t) — t_train_end={tte:.2f}, t_full_end={tfe:.2f}, t_points={tn}")
 ax_ts.set_xlabel("t")
 ax_ts.set_ylabel("x(t), y(t)")
 ax_ts.grid(True)
@@ -599,7 +599,7 @@ if show_connections:
     # Add vertical line to indicate the transition from training to extrapolation
     ax_shad.axhline(y=tte, color='red', linestyle='--', alpha=0.7, label=f't_train_end={tte}')
     
-    ax_shad.set_title(f"Shadowing ({nn_model_type}) — ε(t) vs t — t_train_end={tte}, t_full_end={tfe}, t_points={tn}")
+    ax_shad.set_title(f"Shadowing ({nn_model_type}) — ε(t) vs t — t_train_end={tte:.2f}, t_full_end={tfe:.2f}, t_points={tn}")
     ax_shad.set_xlabel("ε(t)")
     ax_shad.set_ylabel("t")
     ax_shad.grid(True)
