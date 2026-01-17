@@ -428,7 +428,7 @@ if not df_metrics.empty:
     df_sorted = df_metrics.sort_values(by="anomaly_score", ascending=False, na_position="last")
     
     # Master checkbox to hide all trajectories
-    hide_all = st.sidebar.checkbox("Hide all trajectories", value=False, key="hide_all_trajectories")
+    hide_all = st.sidebar.checkbox("Hide all trajectories", value=True, key="hide_all_trajectories")
     
     enabled_raw = st.session_state.get("enabled_checkboxes", [])
     st.session_state.enabled_checkboxes = [i for i in enabled_raw if 0 <= i < len(solutions)]
