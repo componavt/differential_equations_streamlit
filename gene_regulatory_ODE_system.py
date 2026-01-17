@@ -426,9 +426,20 @@ st.sidebar.markdown("**Select trajectories to display (sorted by anomaly score)*
 
 if not df_metrics.empty:
     df_sorted = df_metrics.sort_values(by="anomaly_score", ascending=False, na_position="last")
+    
+    # Master checkbox to hide all trajectories
+    hide_all = st.sidebar.checkbox("Hide all trajectories", value=False, key="hide_all_trajectories")
+    
     enabled_raw = st.session_state.get("enabled_checkboxes", [])
     st.session_state.enabled_checkboxes = [i for i in enabled_raw if 0 <= i < len(solutions)]
-    enabled_set = set(st.session_state.get("enabled_checkboxes", []))
+    
+    # If "Hide all" is checked, clear the enabled checkboxes
+    if hide_all:
+        st.session_state.enabled_checkboxes = []
+        enabled_set = set()
+    else:
+        enabled_set = set(st.session_state.get("enabled_checkboxes", []))
+    
     new_enabled = []
     for m, row in df_sorted.iterrows():
         label = f"{int(row['idx'])}: score={row.get('anomaly_score', np.nan):.3g}, FTLE={row.get('ftle', np.nan):.3g}"
