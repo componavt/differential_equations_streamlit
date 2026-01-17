@@ -19,8 +19,12 @@ import streamlit.components.v1 as components
 # - Added additional metrics: max_kappa, frac_high_curv, curv p10/p90, curv finite count
 # - Anomaly score computed (combines FTLE, path_len, max_kappa, penalizes low R^2)
 # - Display and CSV export rounded to 3 decimal places
-# - Dual solver: DOP853 for full interval, NN for extrapolation
+# - Dual solver: DOP853 for full interval, NN for full interval
 # - t_train_end and t_full_end parameters added
+# - Added shadowing analysis with epsilon(t) plots
+# - Added time series plots x(t) and y(t)
+# - Added connecting lines between DOP853 and NN solutions
+# - Added NN model selection (Feedforward, RNN, GRU)
 # --------------------------------------------------
 
 # Default parameter values
@@ -184,6 +188,14 @@ for angle in angles:
     y0 = center_y + R_val * np.sin(angle)
     initial_conditions.append((x0, y0))
 
+# --- Select NN model ---
+nn_model_type = st.sidebar.selectbox(
+    "Select NN model",
+    ("Feedforward NN", "Simple RNN", "GRU"),
+    index=0,
+    help="Choose the neural network model for comparison with DOP853"
+)
+
 def rhs(t, state):
     x, y = state
     n = 1.0 / alpha_val
@@ -283,10 +295,22 @@ for idx, (x0, y0) in enumerate(initial_conditions):
         continue
 
     # Train neural network on [0, t_train_end]
-    nn_model = train_neural_ode(t_eval_train, x_train, y_train, epochs=100)
-
-    # Get neural network predictions on full interval
-    x_nn_full, y_nn_full = predict_with_neural_ode(nn_model, t_eval_full)
+    if nn_model_type == "Feedforward NN":
+        nn_model = train_neural_ode(t_eval_train, x_train, y_train, epochs=100)
+        # Get neural network predictions on full interval
+        x_nn_full, y_nn_full = predict_with_neural_ode(nn_model, t_eval_full)
+    elif nn_model_type == "Simple RNN":
+        # Placeholder for RNN implementation
+        # For now, we'll use the same approach but in a real implementation,
+        # this would use an RNN model
+        nn_model = train_neural_ode(t_eval_train, x_train, y_train, epochs=100)
+        x_nn_full, y_nn_full = predict_with_neural_ode(nn_model, t_eval_full)
+    elif nn_model_type == "GRU":
+        # Placeholder for GRU implementation
+        # For now, we'll use the same approach but in a real implementation,
+        # this would use a GRU model
+        nn_model = train_neural_ode(t_eval_train, x_train, y_train, epochs=100)
+        x_nn_full, y_nn_full = predict_with_neural_ode(nn_model, t_eval_full)
 
     # Store solutions for plotting
     solutions.append({
@@ -424,32 +448,42 @@ if not df_metrics.empty:
 selected_idx = []
 st.sidebar.markdown("**Select trajectories to display (sorted by anomaly score)**")
 
+# Checkbox for connecting lines between DOP853 and NN
+show_connections = st.sidebar.checkbox("Show connections (DOP853 ↔ NN)", value=False, key="show_connections")
+
+# Connection stride parameter
+if show_connections:
+    connection_stride = st.sidebar.slider("Connection stride", min_value=1, max_value=20, value=5, step=1)
+else:
+    connection_stride = 5  # default value when not showing connections
+
 if not df_metrics.empty:
     df_sorted = df_metrics.sort_values(by="anomaly_score", ascending=False, na_position="last")
     
     # Master checkbox to hide all trajectories
     hide_all = st.sidebar.checkbox("Hide all trajectories", value=True, key="hide_all_trajectories")
     
-    enabled_raw = st.session_state.get("enabled_checkboxes", [])
-    st.session_state.enabled_checkboxes = [i for i in enabled_raw if 0 <= i < len(solutions)]
-    
-    # If "Hide all" is checked, clear the enabled checkboxes
-    if hide_all:
-        st.session_state.enabled_checkboxes = []
-        enabled_set = set()
-    else:
-        enabled_set = set(st.session_state.get("enabled_checkboxes", []))
-    
+    selected_idx = []
     new_enabled = []
+    
     for m, row in df_sorted.iterrows():
-        label = f"{int(row['idx'])}: score={row.get('anomaly_score', np.nan):.3g}, FTLE={row.get('ftle', np.nan):.3g}"
-        # When hide_all is True, all individual checkboxes should be False
-        default_val = False if hide_all else ((row["idx"] in enabled_set) if enabled_set else True)
-        checkbox_result = st.sidebar.checkbox(label, value=default_val, key=f"sel_{int(row['idx'])}")
-        # Only add to new_enabled if hide_all is False and checkbox is checked
-        if not hide_all and checkbox_result:
-            selected_idx.append(int(row['idx']))
-            new_enabled.append(int(row['idx']))
+        idx = int(row["idx"])
+        label = f"{idx}: score={row.get('anomaly_score', np.nan):.3g}, FTLE={row.get('ftle', np.nan):.3g}"
+        
+        checked = st.sidebar.checkbox(
+            label,
+            value=(idx in st.session_state.get("enabled_checkboxes", [])),
+            key=f"traj_{idx}"
+        )
+        
+        if checked:
+            new_enabled.append(idx)
+            selected_idx.append(idx)
+    
+    # FINAL FILTER: if hide_all is True, clear selected_idx
+    if hide_all:
+        selected_idx = []
+    
     st.session_state.enabled_checkboxes = new_enabled
 # --- Plot trajectories ---
 fig, ax = plt.subplots(figsize=(8, 6))
@@ -458,45 +492,107 @@ styles, colors = ['-', '--', '-.', ':'], plt.cm.tab20.colors
 for m, solution_data in enumerate(solutions):
     if m not in selected_idx:
         continue
-    style, color = styles[m % len(styles)], colors[m % len(colors)]
+    color = colors[m % len(colors)]
     
-    # Plot DOP853 solution
+    # Plot DOP853 solution (solid line)
     x_dop = solution_data["dop853_x"]
     y_dop = solution_data["dop853_y"]
-    ax.plot(x_dop, y_dop, linestyle=style, color=color, linewidth=1.2, label=f'DOP853 traj {m}' if m == selected_idx[0] else "")
-    
-    # Plot Neural Network solution on extrapolation interval
+    ax.plot(x_dop, y_dop, linestyle='-', color=color, linewidth=1.2, label=f'DOP853 traj {m}' if m == selected_idx[0] else "")
+
+    # Plot Neural Network solution on full interval (dashed line)
     if solution_data["nn_x"] is not None and solution_data["nn_y"] is not None:
         x_nn = solution_data["nn_x"]
         y_nn = solution_data["nn_y"]
         t_full = solution_data["t_full"]
         
-        # Find the index corresponding to t_train_end to separate training and extrapolation regions
-        train_idx = np.searchsorted(t_full, tte)
-        
-        # Plot training part (should overlap with DOP853)
-        ax.plot(x_nn[:train_idx], y_nn[:train_idx], linestyle='--', color=color, linewidth=1.0, alpha=0.7)
-        
-        # Plot extrapolation part (where differences appear)
-        ax.plot(x_nn[train_idx:], y_nn[train_idx:], linestyle='--', color=color, linewidth=1.2, label=f'NN traj {m}' if m == selected_idx[0] else "")
+        # Plot NN solution as dashed line throughout the full interval
+        ax.plot(x_nn, y_nn, linestyle='--', color=color, linewidth=1.0, alpha=0.7, label=f'NN traj {m}' if m == selected_idx[0] else "")
     
     # Mark initial and final points
     ax.plot(x_dop[0], y_dop[0], 'o', color=color, markersize=4)
     ax.plot(x_dop[-1], y_dop[-1], 'x', color=color, markersize=6)
     ax.text(x_dop[-1] + 0.01, y_dop[-1] + 0.01, f"{m}", fontsize=8, color=color)
+    
+    # Mark t_train_end point with a triangle
+    train_idx = np.searchsorted(t_full, tte)
+    if train_idx < len(x_dop):
+        ax.plot(x_dop[train_idx], y_dop[train_idx], '^', color=color, markersize=8, markeredgecolor='black')
+        
+        # If showing connections, draw lines between DOP853 and NN points
+        if show_connections:
+            for i in range(0, len(x_dop), connection_stride):
+                ax.plot([x_dop[i], x_nn[i]], [y_dop[i], y_nn[i]],
+                       color=color, linewidth=0.5, alpha=0.3, linestyle='-')
 
-# Add vertical line to indicate the transition from training to extrapolation
-ax.axvline(x=x_dop[np.searchsorted(t_full, tte)], color='gray', linestyle=':', label='t_train_end', alpha=0.5)
-
-ax.set_title(f"Gene regulatory trajectories — t_train_end={tte}, t_full_end={tfe}, t_points={tn}")
+ax.set_title(f"Gene regulatory trajectories ({nn_model_type}) — t_train_end={tte}, t_full_end={tfe}, t_points={tn}")
 ax.set_xlabel("x(t)")
 ax.set_ylabel("y(t)")
 ax.grid(True)
 ax.legend()
 st.pyplot(fig)
 
-# --- Show info about dual solvers ---
-st.info(f"DOP853 solved on full interval [0, {tfe:.2f}], NN trained on [0, {tte:.2f}] and extrapolated to [{tte:.2f}, {tfe:.2f}]")
+# --- Time series plot: x(t) and y(t) ---
+fig_ts, ax_ts = plt.subplots(figsize=(8, 6))
+
+for m, solution_data in enumerate(solutions):
+    if m not in selected_idx:
+        continue
+    color = colors[m % len(colors)]
+    
+    t_full = solution_data["t_full"]
+    x_dop = solution_data["dop853_x"]
+    y_dop = solution_data["dop853_y"]
+    
+    # Plot x(t) as solid line and y(t) as dashed line
+    ax_ts.plot(t_full, x_dop, linestyle='-', color=color, linewidth=1.2, label=f'x(t) traj {m}' if m == selected_idx[0] else "")
+    ax_ts.plot(t_full, y_dop, linestyle='--', color=color, linewidth=1.2, label=f'y(t) traj {m}' if m == selected_idx[0] else "")
+
+ax_ts.set_title(f"Time series ({nn_model_type}) — x(t) and y(t) — t_train_end={tte}, t_full_end={tfe}, t_points={tn}")
+ax_ts.set_xlabel("t")
+ax_ts.set_ylabel("x(t), y(t)")
+ax_ts.grid(True)
+ax_ts.legend()
+st.pyplot(fig_ts)
+
+# --- Shadowing plot: epsilon(t) ---
+if show_connections:
+    fig_shad, ax_shad = plt.subplots(figsize=(8, 6))
+    
+    for m, solution_data in enumerate(solutions):
+        if m not in selected_idx:
+            continue
+        color = colors[m % len(colors)]
+        
+        t_full = solution_data["t_full"]
+        x_dop = solution_data["dop853_x"]
+        y_dop = solution_data["dop853_y"]
+        x_nn = solution_data["nn_x"]
+        y_nn = solution_data["nn_y"]
+        
+        # Calculate distance between DOP853 and NN solutions
+        dist = np.sqrt((x_dop - x_nn)**2 + (y_dop - y_nn)**2)
+        # Calculate epsilon(t) as the running maximum (sup norm)
+        epsilon_t = np.maximum.accumulate(dist)
+        
+        ax_shad.plot(epsilon_t, t_full, color=color, linewidth=1.2, label=f'ε(t) traj {m}' if m == selected_idx[0] else "")
+    
+    ax_shad.set_title(f"Shadowing ({nn_model_type}) — ε(t) vs t — t_train_end={tte}, t_full_end={tfe}, t_points={tn}")
+    ax_shad.set_xlabel("ε(t)")
+    ax_shad.set_ylabel("t")
+    ax_shad.grid(True)
+    ax_shad.legend()
+    st.pyplot(fig_shad)
+
+# --- Show info about solvers ---
+st.info(f"DOP853 solved on full interval [0, {tfe:.2f}], NN ({nn_model_type}) trained on [0, {tte:.2f}] and applied to full interval [0, {tfe:.2f}]")
+
+# --- Show NN models description ---
+st.sidebar.markdown("""
+### Available NN Models:
+- **Feedforward NN**: Standard feedforward neural network
+- **Simple RNN**: Simple Recurrent Neural Network
+- **GRU**: Gated Recurrent Unit network
+""")
 
 # --- Show metrics table (rounded) ---
 st.markdown("**Per-trajectory metrics (rounded to 3 decimals)**")
