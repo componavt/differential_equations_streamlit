@@ -443,8 +443,11 @@ if not df_metrics.empty:
     new_enabled = []
     for m, row in df_sorted.iterrows():
         label = f"{int(row['idx'])}: score={row.get('anomaly_score', np.nan):.3g}, FTLE={row.get('ftle', np.nan):.3g}"
-        default_val = (row["idx"] in enabled_set) if enabled_set else True
-        if st.sidebar.checkbox(label, value=default_val, key=f"sel_{int(row['idx'])}"):
+        # When hide_all is True, all individual checkboxes should be False
+        default_val = False if hide_all else ((row["idx"] in enabled_set) if enabled_set else True)
+        checkbox_result = st.sidebar.checkbox(label, value=default_val, key=f"sel_{int(row['idx'])}")
+        # Only add to new_enabled if hide_all is False and checkbox is checked
+        if not hide_all and checkbox_result:
             selected_idx.append(int(row['idx']))
             new_enabled.append(int(row['idx']))
     st.session_state.enabled_checkboxes = new_enabled
