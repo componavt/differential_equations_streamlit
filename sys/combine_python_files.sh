@@ -23,6 +23,11 @@ mkdir -p "$(dirname "$OUTPUT_FILE")"
 
 # Find all Python files in the project and append them to the output file
 find "$PROJECT_ROOT" -name "*.py" -type f -not -path "$OUTPUT_FILE" | sort | while read -r file; do
+    # Check if the file is in the sys directory - if so, skip it
+    if [ "$file" != "$OUTPUT_FILE" ] && [ "$(dirname "$file")" = "$SCRIPT_DIR" ]; then
+        continue
+    fi
+    
     echo "" >> "$OUTPUT_FILE"
     echo "############################################################" >> "$OUTPUT_FILE"
     echo "# FILE: ${file#$PROJECT_ROOT/}" >> "$OUTPUT_FILE"
