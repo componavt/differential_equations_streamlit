@@ -1,30 +1,20 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.integrate import solve_ivp
+from matplotlib.lines import Line2D
 import pandas as pd
 
+from core.ode import gene_regulatory_rhs
+from core.integrate import SciPySolver, NeuralFlowSolver
+from core.metrics import compute_ftle_metrics, hurst_rs, curvature_radius_stats, compute_path_length, compute_anomaly_score
+from core.shadowing import compute_shadowing_diagnostics
+from core.pinn import train_pinn, predict_with_pinn
 from utils.plain_text_parameters import parameters_to_text, text_to_parameters
-from utils.compute_metrics import compute_ftle_metrics
 from utils.highlight_extreme_values_in_table import highlight_extreme_values_in_table
-from utils.neural_ode_solver import train_neural_ode, predict_with_neural_ode
 import streamlit.components.v1 as components
 
 # --------------------------------------------------
-# gene_regulatory_ODE_system (patched v2)
-# - same as patched but STRAIGHT_DIST removed
-# - Robust curvature statistics (clip extreme radii)
-# - Path length computed and shown in metrics
-# - FTLE diagnostics include R^2 of ln(dist) fit and clipping
-# - Added additional metrics: max_kappa, frac_high_curv, curv p10/p90, curv finite count
-# - Anomaly score computed (combines FTLE, path_len, max_kappa, penalizes low R^2)
-# - Display and CSV export rounded to 3 decimal places
-# - Dual solver: DOP853 for full interval, NN for full interval
-# - t_train_end and t_full_end parameters added
-# - Added shadowing analysis with epsilon(t) plots
-# - Added time series plots x(t) and y(t)
-# - Added connecting lines between DOP853 and NN solutions
-# - Added NN model selection (Feedforward, RNN, GRU)
+# Main Streamlit App for Gene Regulatory ODE System
 # --------------------------------------------------
 
 # Default parameter values
@@ -51,7 +41,6 @@ t_number = st.sidebar.slider("t_number", min_value=10, max_value=1000, step=10,
 t_train_end = st.sidebar.slider("Training interval end (t_train_end)", 0.1, 5.0, float(DEFAULTS["t_train_end"]), 0.1)
 t_full_end = st.sidebar.slider("Full integration end (t_full_end)", t_train_end + 0.1, 10.0, float(DEFAULTS["t_full_end"]), 0.1)
 
-
 alpha = st.sidebar.number_input("alpha (1/alpha exponent)", min_value=1e-9, max_value=10.0,
                                 value=float(DEFAULTS["alpha"]), format="%g")
 K = st.sidebar.slider("K", min_value=0.1, max_value=5.0, step=0.1,
@@ -70,11 +59,19 @@ num_points = st.sidebar.slider("Number of trajectories", min_value=3, max_value=
                                value=int(DEFAULTS["num_points"]))
 
 circle_start_end = st.sidebar.slider("Sector on circle (degrees)", 0, 360,
-                                    tuple(map(int, DEFAULTS["circle_start_end"])), step=1)
+                                      tuple(map(int, DEFAULTS["circle_start_end"])), step=1)
 
 # Add controllable center of the initial circle
 center_x = st.sidebar.number_input("Center X (circle center)", value=float(b), format="%g")
 center_y = st.sidebar.number_input("Center Y (circle center)", value=float(b), format="%g")
+
+# Add solver selection
+solver_type = st.sidebar.selectbox(
+    "Select Solver Type",
+    ("SciPy DOP853", "PINN (Physics-Informed Neural Network)"),
+    index=0,
+    help="Choose the solver for the ODE system"
+)
 
 # --- Plain text area and two buttons ---
 
@@ -95,6 +92,7 @@ def collect_params_from_widgets():
         "circle_end": int(ce),
         "center_x": float(center_x),
         "center_y": float(center_y),
+        "solver_type": solver_type,
     }
     # Save only enabled checkboxes if available
     if "enabled_checkboxes" in st.session_state:
@@ -107,7 +105,7 @@ if "params_text" not in st.session_state:
     st.session_state.params_text = parameters_to_text(collect_params_from_widgets())
 
 st.sidebar.markdown("**Parameters (plain text)**")
-params_text = st.sidebar.text_area("Edit parameters here:", value=st.session_state.params_text, height=220, key="params_text")
+params_text = st.sidebar.text_area("Edit parameters here:", value=st.session_state.params_text, height=20, key="params_text")
 
 # Callback: parse text and apply to widgets
 def apply_text_to_sliders():
@@ -133,6 +131,8 @@ def apply_text_to_sliders():
             npts = int(parsed.get("num_points", st.session_state.get("num_points", num_points)))
             enabled_idx = [i for i in enabled_idx if 0 <= i < npts]
             st.session_state.enabled_checkboxes = enabled_idx
+        elif key == "solver_type":
+            st.session_state["solver_type"] = val
 
     if "circle_start" in parsed or "circle_end" in parsed:
         cs = int(parsed.get("circle_start", circle_start_end[0]))
@@ -188,129 +188,59 @@ for angle in angles:
     y0 = center_y + R_val * np.sin(angle)
     initial_conditions.append((x0, y0))
 
-# --- Select NN model ---
-nn_model_type = st.sidebar.selectbox(
-    "Select NN model",
-    ("Feedforward NN", "Simple RNN", "GRU"),
-    index=0,
-    help="Choose the neural network model for comparison with DOP853"
-)
+# --- Create ODE RHS function ---
+rhs_func = gene_regulatory_rhs(alpha_val, K_val, b_val, g1_val, g2_val)
 
-def rhs(t, state):
-    x, y = state
-    n = 1.0 / alpha_val
-    if n > 1000:
-        frac_x = K_val if x > b_val else 0.0
-        frac_y = K_val if y > b_val else 0.0
-    else:
-        x_pos, y_pos = max(x, 0.0), max(y, 0.0)
-        try:
-            pow_b = np.power(b_val, n)
-            pow_x = np.power(x_pos, n)
-            pow_y = np.power(y_pos, n)
-            frac_x = (K_val * pow_x) / (pow_b + pow_x) if np.isfinite(pow_x) else (K_val if x > b_val else 0.0)
-            frac_y = (K_val * pow_y) / (pow_b + pow_y) if np.isfinite(pow_y) else (K_val if y > b_val else 0.0)
-        except Exception:
-            frac_x, frac_y = (K_val if x > b_val else 0.0), (K_val if y > b_val else 0.0)
-    return [frac_x - g1_val * x, frac_y - g2_val * y]
-
-# --- Utility: Hurst exponent (R/S method) ---
-def hurst_rs(ts):
-    x = np.array(ts, dtype=float)
-    N = len(x)
-    if N < 20:
-        return np.nan
-    x = x - np.mean(x)
-    Y = np.cumsum(x)
-    R = np.zeros(N)
-    S = np.zeros(N)
-    for n in range(10, N // 2 + 1):
-        seg = x[:n]
-        Yseg = Y[:n]
-        Rn = np.max(Yseg) - np.min(Yseg)
-        Sn = np.std(seg, ddof=0)
-        if Sn > 0:
-            R[n - 1] = Rn
-            S[n - 1] = Sn
-    valid = (S > 0) & (R > 0)
-    if np.sum(valid) < 3:
-        return np.nan
-    rs = R[valid] / S[valid]
-    ns = np.arange(1, N + 1)[valid]
-    try:
-        H = np.polyfit(np.log(ns), np.log(rs), 1)[0]
-    except Exception:
-        H = np.nan
-    return float(H)
-
-# --- Utility: robust curvature/radius statistics for a parametric curve (x(t), y(t)) ---
-def curvature_radius_stats(x, y, t, max_radius=1e6, clip_inf=True):
-    x_t = np.gradient(x, t)
-    y_t = np.gradient(y, t)
-    x_tt = np.gradient(x_t, t)
-    y_tt = np.gradient(y_t, t)
-    denom = (x_t ** 2 + y_t ** 2) ** 1.5
-    num = np.abs(x_t * y_tt - y_t * x_tt)
-    with np.errstate(divide='ignore', invalid='ignore'):
-        kappa = np.where(denom > 0, num / denom, np.nan)
-    radius = np.where(np.isfinite(kappa) & (kappa != 0), 1.0 / kappa, np.nan)
-    if clip_inf:
-        radius = np.where(radius > max_radius, np.nan, radius)
-    finite = np.isfinite(radius)
-    stats = {
-        "count_total": len(radius),
-        "count_finite": int(np.sum(finite)),
-        "frac_finite": float(np.sum(finite) / len(radius)),
-        "mean": float(np.nanmean(radius)) if np.isfinite(np.nanmean(radius)) else np.nan,
-        "median": float(np.nanmedian(radius)) if np.isfinite(np.nanmedian(radius)) else np.nan,
-        "p10": float(np.nanpercentile(radius, 10)) if np.isfinite(np.nanpercentile(radius, 10)) else np.nan,
-        "p90": float(np.nanpercentile(radius, 90)) if np.isfinite(np.nanpercentile(radius, 90)) else np.nan,
-        "std": float(np.nanstd(radius)) if np.isfinite(np.nanstd(radius)) else np.nan,
-        "radius_array": radius,
-        "kappa_array": (1.0 / radius)  # may contain inf/nan for radius==0
-    }
-    return stats
+# --- Main computation ---
 solutions, metrics = [], []
 
 # Main loop: solve for each initial condition
 for idx, (x0, y0) in enumerate(initial_conditions):
-    # Solve ODE on full interval [0, t_full_end] using DOP853
+    # Solve ODE on full interval [0, t_full_end]
     t_eval_full = np.linspace(0, tfe, tn)
-    try:
-        sol = solve_ivp(rhs, (0, tfe), (x0, y0), method='DOP853', t_eval=t_eval_full)
-        if not sol.success:
+    
+    # Select and configure solver
+    if solver_type == "SciPy DOP853":
+        solver = SciPySolver(method='DOP853')
+        success, x_full, y_full = solver.solve(rhs_func, (x0, y0), t_eval_full)
+    else:  # PINN
+        # For PINN, we need to train first on the full interval
+        solver = NeuralFlowSolver()  # Placeholder - in reality, PINN would be handled differently
+        # For now, we'll use SciPy solver as fallback and note that PINN implementation is more complex
+        scipy_solver = SciPySolver(method='DOP853')
+        success, x_full, y_full = scipy_solver.solve(rhs_func, (x0, y0), t_eval_full)
+        
+        # Train PINN separately if needed
+        try:
+            pinn_model = train_pinn(rhs_func, x0, y0, t_eval_full, epochs=1000)
+            pinn_x_full, pinn_y_full = predict_with_pinn(pinn_model, [x0, y0], t_eval_full)
+        except Exception as e:
+            st.warning(f"PINN training failed: {str(e)}, falling back to SciPy solver")
+            pinn_x_full, pinn_y_full = x_full, y_full
+
+    if not success or x_full is None or y_full is None:
+        # If primary solver failed, try alternative
+        scipy_solver = SciPySolver(method='RK45')
+        success, x_full, y_full = scipy_solver.solve(rhs_func, (x0, y0), t_eval_full)
+        if not success or x_full is None or y_full is None:
+            st.warning(f"Solver failed for initial condition {idx}: ({x0}, {y0})")
             continue
-        x_full, y_full = sol.y
-    except Exception:
-        continue
+
+    # For PINN, use the PINN solution if available
+    if solver_type == "PINN (Physics-Informed Neural Network)" and 'pinn_x_full' in locals():
+        x_full, y_full = pinn_x_full, pinn_y_full
 
     # Get solution on training interval [0, t_train_end] for neural network training
     t_eval_train = np.linspace(0, tte, max(50, tn//2))  # Use fewer points for training
-    try:
-        sol_train = solve_ivp(rhs, (0, tte), (x0, y0), method='DOP853', t_eval=t_eval_train)
-        if not sol_train.success:
-            continue
-        x_train, y_train = sol_train.y
-    except Exception:
+    scipy_train_solver = SciPySolver(method='DOP853')
+    train_success, x_train, y_train = scipy_train_solver.solve(rhs_func, (x0, y0), t_eval_train)
+    if not train_success:
         continue
 
-    # Train neural network on [0, t_train_end]
-    if nn_model_type == "Feedforward NN":
-        nn_model = train_neural_ode(t_eval_train, x_train, y_train, epochs=100)
-        # Get neural network predictions on full interval
-        x_nn_full, y_nn_full = predict_with_neural_ode(nn_model, t_eval_full)
-    elif nn_model_type == "Simple RNN":
-        # Placeholder for RNN implementation
-        # For now, we'll use the same approach but in a real implementation,
-        # this would use an RNN model
-        nn_model = train_neural_ode(t_eval_train, x_train, y_train, epochs=100)
-        x_nn_full, y_nn_full = predict_with_neural_ode(nn_model, t_eval_full)
-    elif nn_model_type == "GRU":
-        # Placeholder for GRU implementation
-        # For now, we'll use the same approach but in a real implementation,
-        # this would use a GRU model
-        nn_model = train_neural_ode(t_eval_train, x_train, y_train, epochs=100)
-        x_nn_full, y_nn_full = predict_with_neural_ode(nn_model, t_eval_full)
+    # Train neural network on [0, t_train_end] - keeping the original neural ODE approach
+    from utils.neural_ode_solver import train_neural_ode, predict_with_neural_ode
+    nn_model = train_neural_ode(t_eval_train, x_train, y_train, epochs=10)
+    x_nn_full, y_nn_full = predict_with_neural_ode(nn_model, t_eval_full)
 
     # Store solutions for plotting
     solutions.append({
@@ -321,10 +251,10 @@ for idx, (x0, y0) in enumerate(initial_conditions):
         "t_full": t_eval_full
     })
 
-    # Calculate metrics using the DOP853 solution on the full interval
+    # Calculate metrics using the primary solution on the full interval
     amp = float(np.max(np.sqrt(x_full * x_full + y_full * y_full)) - np.min(np.sqrt(x_full * x_full + y_full * y_full)))
 
-    ftle, final_d, ftle_r2 = compute_ftle_metrics(rhs, x0, y0, tfe, t_eval_full, x_full, y_full)
+    ftle, final_d, ftle_r2 = compute_ftle_metrics(rhs_func, x0, y0, tfe, t_eval_full, x_full, y_full)
 
     # Hurst: compute for x and y and take mean
     hx = hurst_rs(x_full)
@@ -338,10 +268,7 @@ for idx, (x0, y0) in enumerate(initial_conditions):
     curv_std = cr_stats["std"]
 
     # path length
-    dx = np.diff(x_full)
-    dy = np.diff(y_full)
-    seg_lengths = np.sqrt(dx * dx + dy * dy)
-    path_len = float(np.sum(seg_lengths))
+    path_len = compute_path_length(x_full, y_full)
 
     # maximum curvature (kappa) and fraction of high curvature points
     kappa_arr = cr_stats.get("kappa_array")
@@ -440,8 +367,9 @@ if not df_metrics.empty:
     path_z = robust_z(df_metrics['path_len'].values)
     kappa_z = robust_z(df_metrics['max_kappa'].values)
     r2_z = robust_z(df_metrics['ftle_r2'].fillna(0).values)
-    # score = ftle_z + path_z + kappa_z - r2_z (penalize low r2 by subtracting its z)
-    score_arr = ftle_z + path_z + kappa_z - r2_z
+    hurst_z = robust_z(df_metrics['hurst'].fillna(0).values)
+    # score = ftle_z + path_z + kappa_z - r2_z + hurst_z (penalize low r2 by subtracting its z, include hurst)
+    score_arr = ftle_z + path_z + kappa_z - r2_z + hurst_z
     df_metrics['anomaly_score'] = score_arr
 
 # --- Selection UI (checkbox list, sorted by anomaly_score desc) ---
@@ -468,7 +396,8 @@ if not df_metrics.empty:
     
     for m, row in df_sorted.iterrows():
         idx = int(row["idx"])
-        label = f"{idx}: score={row.get('anomaly_score', np.nan):.3g}, FTLE={row.get('ftle', np.nan):.3g}"
+        # Updated label to include Hurst exponent
+        label = f"{idx}: H={row.get('hurst', np.nan):.3g} | score={row.get('anomaly_score', np.nan):.3g}, FTLE={row.get('ftle', np.nan):.3g}"
         
         checked = st.sidebar.checkbox(
             label,
@@ -485,6 +414,7 @@ if not df_metrics.empty:
         selected_idx = []
     
     st.session_state.enabled_checkboxes = new_enabled
+
 # --- Plot trajectories ---
 fig, ax = plt.subplots(figsize=(8, 6))
 styles, colors = ['-', '--', '-.', ':'], plt.cm.tab20.colors
@@ -536,7 +466,7 @@ for m, solution_data in enumerate(solutions):
     if x_nn is not None and y_nn is not None:
         ax.text(x_nn[-1] + 0.01, y_nn[-1] + 0.01, f"{m}", fontsize=8, color=color)
 
-ax.set_title(f"Gene regulatory trajectories ({nn_model_type}) — t_train_end={tte:.2f}, t_full_end={tfe:.2f}, t_points={tn}")
+ax.set_title(f"Gene regulatory trajectories ({solver_type}) — t_train_end={tte:.2f}, t_full_end={tfe:.2f}, t_points={tn}")
 ax.set_xlabel("x(t)")
 ax.set_ylabel("y(t)")
 ax.grid(True)
@@ -545,7 +475,6 @@ if len(selected_idx) <= 3:
     ax.legend()
 else:
     # Create custom legend with unique labels
-    from matplotlib.lines import Line2D
     legend_elements = [Line2D([0], [0], color='gray', lw=2, linestyle='-', label='DOP853'),
                       Line2D([0], [0], color='gray', lw=2, linestyle='--', label='NN')]
     ax.legend(handles=legend_elements)
@@ -567,7 +496,7 @@ for m, solution_data in enumerate(solutions):
     ax_ts.plot(t_full, x_dop, linestyle='-', color=color, linewidth=1.2, label=f'x(t) traj {m}' if m == selected_idx[0] else "")
     ax_ts.plot(t_full, y_dop, linestyle='--', color=color, linewidth=1.2, label=f'y(t) traj {m}' if m == selected_idx[0] else "")
 
-ax_ts.set_title(f"Time series ({nn_model_type}) — x(t) and y(t) — t_train_end={tte:.2f}, t_full_end={tfe:.2f}, t_points={tn}")
+ax_ts.set_title(f"Time series ({solver_type}) — x(t) and y(t) — t_train_end={tte:.2f}, t_full_end={tfe:.2f}, t_points={tn}")
 ax_ts.set_xlabel("t")
 ax_ts.set_ylabel("x(t), y(t)")
 ax_ts.grid(True)
@@ -576,6 +505,9 @@ st.pyplot(fig_ts)
 
 # --- Shadowing plot: epsilon(t) ---
 if show_connections:
+    # Import shadowing functionality
+    from core.shadowing import compute_epsilon_t, find_shadowing_breakdown_time
+    
     fig_shad, ax_shad = plt.subplots(figsize=(8, 6))
     
     for m, solution_data in enumerate(solutions):
@@ -592,14 +524,19 @@ if show_connections:
         # Calculate distance between DOP853 and NN solutions
         dist = np.sqrt((x_dop - x_nn)**2 + (y_dop - y_nn)**2)
         # Calculate epsilon(t) as the running maximum (sup norm)
-        epsilon_t = np.maximum.accumulate(dist)
+        epsilon_t = compute_epsilon_t(dist)
         
         ax_shad.plot(epsilon_t, t_full, color=color, linewidth=1.2, label=f'ε(t) traj {m}' if m == selected_idx[0] else "")
+        
+        # Calculate and annotate shadowing breakdown time
+        shadowing_time, shadowing_length, shadowing_ratio = find_shadowing_breakdown_time(epsilon_t, t_full)
+        if shadowing_time is not None:
+            ax_shad.axhline(y=shadowing_time, color=color, linestyle=':', alpha=0.7, label=f't*={shadowing_time:.2f} traj {m}')
     
     # Add vertical line to indicate the transition from training to extrapolation
     ax_shad.axhline(y=tte, color='red', linestyle='--', alpha=0.7, label=f't_train_end={tte}')
     
-    ax_shad.set_title(f"Shadowing ({nn_model_type}) — ε(t) vs t — t_train_end={tte:.2f}, t_full_end={tfe:.2f}, t_points={tn}")
+    ax_shad.set_title(f"Shadowing ({solver_type}) — ε(t) vs t — t_train_end={tte:.2f}, t_full_end={tfe:.2f}, t_points={tn}")
     ax_shad.set_xlabel("ε(t)")
     ax_shad.set_ylabel("t")
     ax_shad.grid(True)
@@ -608,22 +545,42 @@ if show_connections:
         ax_shad.legend()
     else:
         # Create custom legend with unique labels
-        from matplotlib.lines import Line2D
         legend_elements = [Line2D([0], [0], color='gray', lw=2, linestyle='-', label='ε(t)'),
                           Line2D([0], [0], color='red', lw=1, linestyle='--', label=f'train/extrap boundary')]
         ax_shad.legend(handles=legend_elements)
     st.pyplot(fig_shad)
+    
+    # Display shadowing diagnostics
+    st.markdown("**Shadowing Diagnostics:**")
+    shadowing_diagnostics_text = ""
+    for m, solution_data in enumerate(solutions):
+        if m not in selected_idx:
+            continue
+        
+        t_full = solution_data["t_full"]
+        x_dop = solution_data["dop853_x"]
+        y_dop = solution_data["dop853_y"]
+        x_nn = solution_data["nn_x"]
+        y_nn = solution_data["nn_y"]
+        
+        # Calculate distance between DOP853 and NN solutions
+        dist = np.sqrt((x_dop - x_nn)**2 + (y_dop - y_nn)**2)
+        # Calculate epsilon(t) as the running maximum (sup norm)
+        epsilon_t = compute_epsilon_t(dist)
+        
+        # Calculate shadowing breakdown diagnostics
+        shadowing_time, shadowing_length, shadowing_ratio = find_shadowing_breakdown_time(epsilon_t, t_full)
+        
+        if shadowing_time is not None:
+            shadowing_diagnostics_text += f"Trajectory {m}: t* = {shadowing_time:.3f}, length = {shadowing_length:.3f}, ratio = {shadowing_ratio:.3f}\n"
+        else:
+            shadowing_diagnostics_text += f"Trajectory {m}: No breakdown (ε(t) ≤ threshold for entire duration)\n"
+    
+    if shadowing_diagnostics_text:
+        st.text(shadowing_diagnostics_text)
 
 # --- Show info about solvers ---
-st.info(f"DOP853 solved on full interval [0, {tfe:.2f}], NN ({nn_model_type}) trained on [0, {tte:.2f}] and applied to full interval [0, {tfe:.2f}]")
-
-# --- Show NN models description ---
-st.sidebar.markdown("""
-### Available NN Models:
-- **Feedforward NN**: Standard feedforward neural network
-- **Simple RNN**: Simple Recurrent Neural Network
-- **GRU**: Gated Recurrent Unit network
-""")
+st.info(f"DOP853 solved on full interval [0, {tfe:.2f}], NN (Feedforward) trained on [0, {tte:.2f}] and applied to full interval [0, {tfe:.2f}]")
 
 # --- Show metrics table (rounded) ---
 st.markdown("**Per-trajectory metrics (rounded to 3 decimals)**")
